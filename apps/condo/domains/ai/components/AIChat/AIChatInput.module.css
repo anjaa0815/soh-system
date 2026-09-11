@@ -1,0 +1,42 @@
+.input-container {
+  position: var(--ai-chat-input-position, absolute);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  max-width: var(--ai-chat-input-max-width, none);
+  margin-inline: var(--ai-chat-input-margin-inline, 0);
+  padding: var(--ai-chat-input-padding, var(--condo-global-spacing-16) var(--condo-global-spacing-24));
+  background: var(--ai-chat-input-bg, color-mix(in srgb, var(--condo-global-color-gray-1) 88%, transparent));
+  border: var(--ai-chat-input-border, none);
+  border-radius: var(--ai-chat-input-border-radius, 0);
+  box-shadow: var(--ai-chat-input-box-shadow, none);
+  backdrop-filter: var(--ai-chat-input-backdrop, blur(20px));
+}
+
+.text-area-container {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.text-area-container :global(.condo-input.condo-input-textarea-wrapper) {
+  width: 100%;
+}
+
+.text-area-container :global(.condo-input-textarea) {
+  width: 100%;
+}
+
+.attachments-container {
+  max-height: 210px;
+  margin-bottom: var(--condo-global-spacing-8);
+  overflow-y: auto;
+}
+
+.attachment-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--condo-global-spacing-4);
+  width: 100%;
+}

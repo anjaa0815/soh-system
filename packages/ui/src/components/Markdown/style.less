@@ -1,0 +1,55 @@
+@import (reference) "@open-condo/ui/src/tokens/variables.less";
+@import (reference) "@open-condo/ui/src/components/style/mixins/rich-content.less";
+
+.condo-markdown-task-list-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.condo-markdown {
+  .condo-rich-content();
+
+  &--inline {
+    .condo-rich-content-inline();
+  }
+
+  & > * {
+    margin-bottom: @condo-global-spacing-20;
+  }
+
+  & > *:last-child {
+    margin-bottom: 0;
+  }
+
+  ul,
+  ol {
+    &.contains-task-list {
+      margin-bottom: 0;
+      padding-left: 0;
+
+      & > li {
+        list-style-type: none;
+
+        &:not(:last-child) {
+          margin-bottom: 0.5em;
+        }
+      }
+
+      & > li > ul.contains-task-list,
+      & > li > ol.contains-task-list {
+        margin-top: 0.5em;
+        margin-bottom: 0;
+        padding-left: @condo-global-spacing-20;
+      }
+    }
+  }
+
+  .condo-alert:not(:last-child) {
+    margin-bottom: @condo-global-spacing-20;
+  }
+
+  .condo-alert-description > .condo-typography {
+    font-size: @condo-global-font-size-text-m;
+  }
+}

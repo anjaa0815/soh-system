@@ -1,0 +1,61 @@
+import React, { useCallback, useState } from 'react'
+import { useIntl } from 'react-intl'
+
+import { Button } from '@open-condo/ui'
+
+import { EmptySubSectionView } from '@/domains/miniapp/components/EmptySubSectionView'
+
+import { RegisterUserModal } from './RegisterUserModal'
+
+import { AppEnvironment, AppType } from '@/gql'
+
+type RegisterUserFormProps = {
+    id: string
+    environment: AppEnvironment
+    appType: AppType
+}
+
+export const RegisterUserForm: React.FC<RegisterUserFormProps> = ({ id, environment, appType }) => {
+    const intl = useIntl()
+    const NoUserMessage = intl.formatMessage({ id: 'pages.apps.any.id.sections.serviceUser.userSettings.registerUserForm.emptyView.message' })
+    const NoUserDescription = intl.formatMessage({ id: 'pages.apps.any.id.sections.serviceUser.userSettings.registerUserForm.emptyView.description' })
+    const RegisterUserActionLabel = intl.formatMessage({ id: 'pages.apps.any.id.sections.serviceUser.userSettings.registerUserForm.emptyView.actions.register' })
+
+    const [registerUserModalOpen, setRegisterUserModalOpen] = useState(false)
+
+    const openRegisterModal = useCallback(() => {
+        setRegisterUserModalOpen(true)
+    }, [])
+    const closeRegisterModal = useCallback(() => {
+        setRegisterUserModalOpen(false)
+    }, [])
+
+
+    return (
+        <>
+            <EmptySubSectionView
+                image='/mascot/searching.webp'
+                title={NoUserMessage}
+                description={NoUserDescription}
+                actions={[
+                    <Button
+                        key='primary-action'
+                        type='primary'
+                        onClick={openRegisterModal}
+                    >
+                        {RegisterUserActionLabel}
+                    </Button>,
+                ]}
+            />
+            {registerUserModalOpen && (
+                <RegisterUserModal
+                    id={id}
+                    environment={environment}
+                    open={registerUserModalOpen}
+                    onClose={closeRegisterModal}
+                    appType={appType}
+                />
+            )}
+        </>
+    )
+}

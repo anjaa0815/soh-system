@@ -1,0 +1,329 @@
+const jwt = require('jsonwebtoken')
+const get = require('lodash/get')
+const omit = require('lodash/omit')
+
+const conf = require('@open-condo/config')
+const { attachFileFromServer } = require('@open-condo/files/server')
+const { validateFileUploadSignature } = require('@open-condo/files/utils')
+const { GQLError, GQLErrorCode: { INTERNAL_ERROR, BAD_USER_INPUT, FORBIDDEN } } = require('@open-condo/keystone/errors')
+const { graphqlCtx } = require('@open-condo/keystone/KSv5v6/utils/graphqlCtx')
+const { getLogger } = require('@open-condo/keystone/logging')
+
+const FileWithUTF8Name  = require('../FileWithUTF8Name/index')
+
+const logger = getLogger('custom-file')
+const ERRORS = {
+    INTERNAL_ERROR: {
+        code: INTERNAL_ERROR,
+        type: 'FAILED_TO_ATTACH_FILE',
+        message: 'File service returned unexpected error during file verification process',
+    },
+    WRONG_SIGNATURE: {
+        code: BAD_USER_INPUT,
+        type: 'WRONG_SIGNATURE',
+        message: 'Signature is wrong or expired',
+    },
+    ACCESS_DENIED: {
+        code: FORBIDDEN,
+        type: 'ACCESS_DENIED',
+        message: 'You are not own this file',
+    },
+    LEGACY_FLOW_RESTRICTED: {
+        code: BAD_USER_INPUT,
+        type: 'LEGACY_FLOW_RESTRICTED',
+        message: 'You are unable to use graphql upload flow',
+    },
+    MISSING_ITEM_ID_FOR_FILE_ATTACH: {
+        code: BAD_USER_INPUT,
+        type: 'MISSING_ITEM_ID_FOR_FILE_ATTACH',
+        message: 'Cannot attach file: missing target item id',
+    },
+}
+
+
+class CustomFile extends FileWithUTF8Name.implementation {
+    constructor () {
+        super(...arguments)
+        this.graphQLOutputType = 'File'
+        this._fileSecret = conf['FILE_SECRET']
+        this._fileClientId = conf['FILE_CLIENT_ID']
+        this._strictMode = conf['FILE_UPLOAD_STRICT_MODE'] || false
+        this._appClients = conf['FILE_UPLOAD_CONFIG'] ? get(JSON.parse(conf['FILE_UPLOAD_CONFIG']), 'clients', {}) : {}
+    }
+
+    _getFileNewFlowKey (listKey, context) {
+        const gqlFieldAlias = context?._gqlFieldAlias || graphqlCtx.getStore()?.gqlFieldAlias
+        const baseKey = `${listKey}.${this.path}`
+
+        return gqlFieldAlias ? `${baseKey}:${gqlFieldAlias}` : baseKey
+    }
+
+    _getFileServiceBaseUrl () {
+        if (conf.FILE_SERVICE_URL) {
+            return conf.FILE_SERVICE_URL
+        }
+
+        // Apps without local FileMiddleware attach to condo over HTTP (signature-only)
+        if (!conf['FILE_UPLOAD_CONFIG'] && conf.CONDO_DOMAIN) {
+            return conf.CONDO_DOMAIN
+        }
+
+        // conf.SERVER_URL is cached at config init; read env for tests that override SERVER_URL
+        return process.env.SERVER_URL || conf.SERVER_URL
+    }
+
+    _getSecretForSignature (signature) {
+        try {
+            // Upload signature payload: { id, fileClientId, ... } (flattened from fileMeta.meta)
+            // Attach result signature payload: { id, recordId, ..., meta: { fileClientId, ... } } (full fileMeta)
+            // We decode without verify only to determine which client secret to use for the real verification below.
+            // An attacker claiming a wrong fileClientId would fail jwt.verify anyway with the mismatched secret.
+            // nosemgrep: javascript.jsonwebtoken.security.audit.jwt-decode-without-verify.jwt-decode-without-verify
+            const decoded = jwt.decode(signature)
+            const fileClientId = decoded?.fileClientId || decoded?.meta?.fileClientId
+            const clientSecret = fileClientId && this._appClients[fileClientId]?.secret
+            return clientSecret || this._fileSecret
+        } catch {
+            return this._fileSecret
+        }
+    }
+
+    getFileUploadType () {
+        return 'FileMeta'
+    }
+
+    getGqlAuxTypes () {
+        return [
+            `
+            type ${this.graphQLOutputType} {
+              id: ID
+              path: String
+              filename: String
+              originalFilename: String
+              mimetype: String
+              encoding: String
+              publicUrl: String
+              meta: JSON
+            }
+          `,
+        ]
+    }
+
+    gqlOutputFieldResolvers () {
+        return {
+            [this.path]: (item, args, context) => {
+                const itemValues = item[this.path]
+                if (!itemValues) {
+                    return null
+                }
+
+                if (typeof itemValues === 'string') {
+                    return itemValues
+                }
+
+                const user = context?.req?.user || context?.authedItem || null
+
+                return {
+                    publicUrl: this.fileAdapter.publicUrl(itemValues, user),
+                    ...itemValues,
+                }
+            },
+        }
+    }
+
+    async validateInput (props) {
+        const { context, resolvedData, listKey } = props
+
+        const fileData = resolvedData[this.path]
+        if (fileData && fileData['signature']) {
+            let fileMeta
+            try {
+                fileMeta = jwt.verify(fileData['signature'], this._getSecretForSignature(fileData['signature']), { algorithms: ['HS256'] })
+            } catch (err) {
+                throw new GQLError({ ...ERRORS.WRONG_SIGNATURE, variable: [this.path] }, context)
+            }
+
+            const { data, success, error } = validateFileUploadSignature(fileMeta)
+            if (!success) {
+                throw new GQLError(ERRORS.WRONG_SIGNATURE, context, error)
+            }
+
+            // skipAccessControl serverSchema updates may have no authedItem; ownership was enforced at upload
+            if (!context.skipAccessControl && data.user?.id && context.authedItem?.id && data.user.id !== context.authedItem.id) {
+                throw new GQLError({ ...ERRORS.ACCESS_DENIED, variable: [this.path] }, context)
+            }
+
+            if (Array.isArray(data.modelNames) && data.modelNames.length > 0 && !data.modelNames.includes(listKey)) {
+                throw new GQLError({
+                    ...ERRORS.ACCESS_DENIED,
+                    variable: [this.path],
+                    message: 'Owner of this file restrict connection to this model',
+                }, context)
+            }
+        }
+
+        return await super.validateInput(props)
+    }
+
+    async resolveInput ({ resolvedData, existingItem, context, listKey }) {
+        const input = resolvedData[this.path]
+
+        // === New flow (signature): don't write a file yet; just mark this request ===
+        if (get(input, 'signature')) {
+            let fileMeta
+
+            try {
+                fileMeta = jwt.verify(input.signature, this._getSecretForSignature(input.signature), { algorithms: ['HS256'] })
+            } catch (err) {
+                throw new GQLError({ ...ERRORS.WRONG_SIGNATURE, variable: [this.path] }, context)
+            }
+
+            const { success, error } = validateFileUploadSignature(fileMeta)
+
+            if (!success) {
+                throw new GQLError(ERRORS.WRONG_SIGNATURE, context, error)
+            }
+
+            if (!context._fileNewFlow) context._fileNewFlow = {}
+
+            context._fileNewFlow[this._getFileNewFlowKey(listKey, context)] = {
+                signature: input.signature,
+                userId: context.authedItem?.id || null,
+                listKey,
+                originalFilename: input.originalFilename,
+            }
+
+            return {
+                originalFilename: input.originalFilename || '',
+                mimetype: fileMeta.mimetype || '',
+                id: fileMeta.id || null,
+            }
+        }
+
+        if (this._strictMode) {
+            throw new GQLError({
+                ...ERRORS.LEGACY_FLOW_RESTRICTED,
+                variable: [this.path],
+            }, context)
+        }
+
+        // === Legacy flow (Upload stream): delegate to base ===
+        return super.resolveInput({ resolvedData, existingItem })
+    }
+
+    async beforeChange ({ resolvedData, existingItem, context, listKey, operation }) {
+        const fileNewFlow = context._fileNewFlow?.[this._getFileNewFlowKey(listKey, context)]
+        if (!fileNewFlow) return
+
+        // Verify and decode signature to get the original fileClientId
+        let signatureData
+        try {
+            signatureData = jwt.verify(fileNewFlow.signature, this._getSecretForSignature(fileNewFlow.signature))
+        } catch (e) {
+            throw new GQLError(ERRORS.WRONG_SIGNATURE)
+        }
+        const fileClientId = signatureData?.fileClientId || this._fileClientId
+        const itemId = resolvedData?.id || existingItem?.id
+        if (!itemId) {
+            throw new GQLError({
+                ...ERRORS.MISSING_ITEM_ID_FOR_FILE_ATTACH,
+                message: `${ERRORS.MISSING_ITEM_ID_FOR_FILE_ATTACH.message}. listKey=${listKey}, field=${this.path}, operation=${operation}`,
+                variable: [this.path],
+            }, context)
+        }
+
+        const payload = {
+            itemId,
+            modelName: listKey,
+            signature: fileNewFlow.signature,
+            fileClientId: fileClientId,
+            dv: 1, sender: resolvedData.sender,
+        }
+
+        // Local file service only: in-process attach. Apps without FILE_UPLOAD_CONFIG goes through to HTTP.
+        if (context?.skipAccessControl && conf['FILE_UPLOAD_CONFIG']) {
+            try {
+                const { signature } = await attachFileFromServer({
+                    signature: fileNewFlow.signature,
+                    modelName: listKey,
+                    itemId,
+                    fileClientId,
+                    fingerprint: resolvedData.sender?.fingerprint,
+                    userId: signatureData?.user?.id,
+                    skipAccessControl: true,
+                })
+                const data = jwt.verify(signature, this._getSecretForSignature(signature), { algorithms: ['HS256'] })
+                resolvedData[this.path] = omit(data, ['iat', 'exp'])
+            } catch (err) {
+                logger.error({ msg: 'unexpected file attach error (skipAccessControl)', err })
+                if (err instanceof GQLError) throw err
+                throw new GQLError(ERRORS.INTERNAL_ERROR, context)
+            }
+            return
+        }
+
+        let attachResult
+
+        // Dual-mode attach: upload JWT alone is enough (no session/Bearer required for S2S)
+        try {
+            const res = await fetch(`${this._getFileServiceBaseUrl()}/api/files/attach`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+
+            attachResult = await res.json()
+
+            if (!res.ok) {
+                if (attachResult?.errors && attachResult?.errors?.length > 0) {
+                    throw new GQLError({
+                        message: attachResult.errors[0].message,
+                        code: res.statusCode,
+                        type: attachResult.errors[0].extensions.type,
+                    }, context)
+                }
+
+                logger.error({ msg: 'fetch error', errors: attachResult.errors, attachResult })
+                throw new GQLError(ERRORS.INTERNAL_ERROR, context)
+            }
+
+            attachResult = attachResult.data.file.signature
+
+            const data = jwt.verify(attachResult, this._getSecretForSignature(attachResult), { algorithms: ['HS256'] })
+
+            resolvedData[this.path] = omit(data, ['iat', 'exp'])
+        } catch (err) {
+            logger.error({ msg: 'unexpected file attach error', err })
+            if (err instanceof GQLError) {
+                throw err
+            }
+
+            throw new GQLError(ERRORS.INTERNAL_ERROR, context)
+        }
+    }
+
+    getBackingTypes () {
+        const type = `null | {
+            id: string;
+            path: string;
+            filename: string;
+            originalFilename: string;
+            mimetype: string;
+            encoding: string;
+            meta: Record<string, any>
+            _meta: Record<string, any>
+           }
+        `
+        return { [this.path]: { optional: true, type } }
+    }
+
+    gqlCreateInputFields () {
+        return [`${this.path}: ${this.getFileUploadType()}`]
+    }
+
+    gqlUpdateInputFields () {
+        return [`${this.path}: ${this.getFileUploadType()} `]
+    }
+}
+
+module.exports = { CustomFile }

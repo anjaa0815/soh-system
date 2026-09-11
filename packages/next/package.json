@@ -1,0 +1,36 @@
+{
+  "name": "@open-condo/next",
+  "main": "./index.js",
+  "version": "1.0.0",
+  "dependencies": {
+    "@apollo/client": "catalog:",
+    "@graphql-typed-document-node/core": "3.2.0",
+    "@open-condo/apollo": "workspace:^",
+    "@open-condo/miniapp-utils": "workspace:^",
+    "apollo-upload-client": "^17.0.0",
+    "eventemitter3": "^4.0.0",
+    "graphql": "catalog:",
+    "graphql-tag": "catalog:",
+    "isomorphic-unfetch": "^3.0.0",
+    "js-cookie": "^3.0.8",
+    "lodash": "catalog:",
+    "next": "catalog:",
+    "next-cookies": "^2.0.3",
+    "pino": "^6.13.3",
+    "react-intl": "catalog:"
+  },
+  "devDependencies": {
+    "@open-condo/tsconfig": "workspace:^"
+  },
+  "exports": {
+    "./logging/patchConsoleLogMethods": "./logging/patchConsoleLogMethods.js",
+    "./_utils": "./_utils.ts",
+    "./_useEmitterMutation": "./_useEmitterMutation.ts",
+    "./*": "./*.tsx"
+  },
+  "repository": "https://github.com/open-condo-software/condo/tree/main/packages/next",
+  "peerDependencies": {
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1"
+  }
+}

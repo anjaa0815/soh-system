@@ -1,0 +1,50 @@
+{
+  "name": "@app/dev-portal-api",
+  "version": "0.0.0-development",
+  "private": true,
+  "scripts": {
+    "test": "jest --unhandled-rejections=strict",
+    "prepare": "node bin/prepare.js",
+    "build:deps": "turbo build --filter=@app/dev-portal-api^... --filter=!@app/condo",
+    "build": "cross-env PHASE=build keystone build",
+    "dev": "node --trace-warnings ./../../bin/run-keystone-app.js",
+    "start": "NODE_ENV=production node ./../../bin/run-keystone-app.js",
+    "makemigrations": "python3 ./../../bin/kmigrator.py makemigrations",
+    "migrate": "python3 ./../../bin/kmigrator.py migrate",
+    "migrate:down": "python3 ./../../bin/kmigrator.py down",
+    "maketypes": "mkdir -p dist/admin && node ./../../bin/create-graphql-schema.js --no-codegen",
+    "createschema": "./../../bin/createschema",
+    "createservice": "node ./../../bin/createservice",
+    "worker": "cross-env PHASE=worker node worker.js"
+  },
+  "dependencies": {
+    "@dev-portal-api/domains": "link:./domains",
+    "@faker-js/faker": "catalog:",
+    "@open-condo/apollo-server-client": "workspace:^",
+    "@open-condo/codegen": "workspace:^",
+    "@open-condo/config": "workspace:^",
+    "@open-condo/keystone": "workspace:^",
+    "@open-condo/locales": "workspace:^",
+    "@open-condo/miniapp-utils": "workspace:^",
+    "@open-condo/webhooks": "workspace:^",
+    "archiver": "7.0.1",
+    "dayjs": "catalog:",
+    "express": "catalog:",
+    "got": "^11.8.6",
+    "graphql-tag": "catalog:",
+    "lodash": "catalog:",
+    "node-html-parser": "^7.0.2",
+    "phone": "^3.1.41",
+    "unzipper": "0.12.3"
+  },
+  "devDependencies": {
+    "@app/condo": "workspace:^",
+    "@open-condo/cli": "workspace:^",
+    "@types/jest": "catalog:",
+    "@types/node": "catalog:",
+    "cross-env": "catalog:",
+    "jest": "catalog:",
+    "jest-jasmine2": "catalog:"
+  },
+  "repository": "https://github.com/open-condo-software/condo/tree/main/apps/dev-portal-api"
+}

@@ -1,0 +1,524 @@
+import { B2BAppNewsSharingConfig } from '@app/condo/schema'
+import { Col, FormInstance, notification, Row, Form } from 'antd'
+import classNames from 'classnames'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import { useFeatureFlags } from '@open-condo/featureflags/FeatureFlagsContext'
+import { CheckCircle, Copy, Sparkles } from '@open-condo/icons'
+import { useIntl } from '@open-condo/next/intl'
+import {
+    Button,
+    Input,
+    RichTextAreaProps,
+    Tooltip,
+    Typography,
+} from '@open-condo/ui'
+
+import AIInputNotification from '@condo/domains/ai/components/AIInputNotification'
+import { FLOW_TYPES } from '@condo/domains/ai/constants'
+import { useAIConfig, useAIFlow } from '@condo/domains/ai/hooks/useAIFlow'
+import { UI_NEWS_MARKDOWN } from '@condo/domains/common/constants/featureflags'
+import { analytics } from '@condo/domains/common/utils/analytics'
+import { stripMarkdown } from '@condo/domains/common/utils/stripMarkdown'
+import { B2BAppFrame } from '@condo/domains/miniapp/components/B2BAppFrame'
+import { getBodyTemplateChangedRule, getTitleTemplateChangedRule, type TemplatesType } from '@condo/domains/news/components/NewsForm/BaseNewsForm'
+import { TemplatesSelect } from '@condo/domains/news/components/TemplatesSelect'
+import { NEWS_TYPE_COMMON, NEWS_TYPE_EMERGENCY } from '@condo/domains/news/constants/newsTypes'
+
+import styles from './InputStepForm.module.css'
+
+import { NewsItemDataType } from './index'
+
+interface InputStepFormProps {
+    newsSharingConfig: B2BAppNewsSharingConfig
+    isSharingStep: boolean
+    newsItemData: NewsItemDataType
+    selectedBody: string
+    selectedTitle: string
+    form: FormInstance
+    sharingAppId: string
+    autoFocusBody: boolean
+    templates: TemplatesType
+
+    processedInitialValues: {
+        formValues: Record<string, unknown>
+        preview: {
+            renderedTitle: string
+            renderedBody: string
+        }
+        isValid: boolean
+    }
+
+    handleTemplateChange: (form: FormInstance) => (value: string) => void
+    handleFormTitleChange: (form: FormInstance) => (value: string) => void
+    handleFormBodyChange: (form: FormInstance) => (value: string) => void
+
+    template: {
+        title: string
+        body: string
+        type?: string
+        id?: string
+        label?: string
+        category?: string
+    }
+}
+
+const REFRESH_COPY_BUTTON_INTERVAL_IN_MS = 3000
+interface DefaultAiTextAreaProps {
+    inputType: 'title' | 'body'
+    value: string
+    textForContext: string
+    handleFormTextChange: (value: string) => void
+    autoFocus?: boolean
+    useRichText?: boolean
+}
+
+const DefaultAiTextArea: React.FC<DefaultAiTextAreaProps> = ({
+    inputType,
+    value,
+    textForContext,
+    handleFormTextChange,
+    autoFocus,
+    useRichText = false,
+}) => {
+    const intl = useIntl()
+
+    const TitlePlaceholderMessage = intl.formatMessage({ id: 'news.fields.title.placeholder' })
+    const BodyPlaceholderMessage = intl.formatMessage({ id: 'news.fields.body.placeholder' })
+    const CopyTooltipText = intl.formatMessage({ id: 'Copy' })
+    const CopiedTooltipText = intl.formatMessage({ id: 'Copied' })
+    const UpdateTextMessage = intl.formatMessage({ id: 'ai.improveText' })
+    const GenericErrorMessage = intl.formatMessage({ id: 'ServerErrorPleaseTryAgainLater' })
+    const UndoTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.undo' })
+    const RedoTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.redo' })
+    const EmojiTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.emoji' })
+    const BoldTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.bold' })
+    const ItalicTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.italic' })
+    const OrderedListTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.orderedList' })
+    const UnorderedListTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.unorderedList' })
+    const RemoveFormattingTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.removeFormatting' })
+    const LinkTooltipText = intl.formatMessage({ id: 'richTextArea.toolbar.link' })
+    const LinkModalUrlLabel = intl.formatMessage({ id: 'richTextArea.linkModal.urlLabel' })
+    const LinkModalTextLabel = intl.formatMessage({ id: 'richTextArea.linkModal.textLabel' })
+    const LinkModalSubmitLabel = intl.formatMessage({ id: 'richTextArea.linkModal.submitLabel' })
+    const EmojiDropdownCategoriesActivity = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.activity' })
+    const EmojiDropdownCategoriesFlags = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.flags' })
+    const EmojiDropdownCategoriesFoods = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.foods' })
+    const EmojiDropdownCategoriesFrequent = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.frequent' })
+    const EmojiDropdownCategoriesNature = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.nature' })
+    const EmojiDropdownCategoriesObjects = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.objects' })
+    const EmojiDropdownCategoriesPeople = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.people' })
+    const EmojiDropdownCategoriesPlaces = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.places' })
+    const EmojiDropdownCategoriesSymbols = intl.formatMessage({ id: 'richTextArea.emojiDropdown.categories.symbols' })
+
+
+    const toolbarLabels = useMemo(() => ({
+        undo: UndoTooltipText,
+        redo: RedoTooltipText,
+        bold: BoldTooltipText,
+        italic: ItalicTooltipText,
+        orderedList: OrderedListTooltipText,
+        link: LinkTooltipText,
+        unorderedList: UnorderedListTooltipText,
+        removeFormatting: RemoveFormattingTooltipText,
+    }), [LinkTooltipText, UnorderedListTooltipText, RemoveFormattingTooltipText, OrderedListTooltipText, BoldTooltipText, ItalicTooltipText, RedoTooltipText, UndoTooltipText])
+
+    const bottomPanelLabels = useMemo(() => ({
+        emoji: EmojiTooltipText,
+    }), [EmojiTooltipText])
+
+    const linkModalLabels = useMemo(() => ({
+        urlLabel: LinkModalUrlLabel,
+        textLabel: LinkModalTextLabel,
+        submitLabel: LinkModalSubmitLabel,
+    }), [LinkModalUrlLabel, LinkModalTextLabel, LinkModalSubmitLabel])
+
+    const emojiDropdownLabels = useMemo(() => ({
+        categories: {
+            activity: EmojiDropdownCategoriesActivity,
+            flags: EmojiDropdownCategoriesFlags,
+            foods: EmojiDropdownCategoriesFoods,
+            frequent: EmojiDropdownCategoriesFrequent,
+            nature: EmojiDropdownCategoriesNature,
+            objects: EmojiDropdownCategoriesObjects,
+            people: EmojiDropdownCategoriesPeople,
+            places: EmojiDropdownCategoriesPlaces,
+            symbols: EmojiDropdownCategoriesSymbols,
+        },
+    }), [EmojiDropdownCategoriesActivity, EmojiDropdownCategoriesFlags, EmojiDropdownCategoriesFoods, EmojiDropdownCategoriesFrequent, EmojiDropdownCategoriesNature, EmojiDropdownCategoriesObjects, EmojiDropdownCategoriesPeople, EmojiDropdownCategoriesPlaces, EmojiDropdownCategoriesSymbols])
+
+    const { status: validationStatus } = Form.Item.useStatus()
+    const inputHasError = validationStatus === 'error'
+
+    const { enabled: aiFeaturesEnabled, features: {
+        rewriteNewsText: rewriteNewsEnabled,
+    } } = useAIConfig()
+
+    const rewriteNewsTextEnabled = useMemo(() => aiFeaturesEnabled && rewriteNewsEnabled,
+        [aiFeaturesEnabled, rewriteNewsEnabled])
+
+    const newsTextAreaRef = useRef(null)
+
+    const [rewriteNewsText, setRewriteNewsText] = useState('')
+    const [newsTextAiNotificationShow, setNewsTextAiNotificationShow] = useState(false)
+    const [copied, setCopied] = useState<boolean>()
+
+    const [ { execute: runRewriteNewsTextAIFlow }, {
+        loading: isRewriteNewsTextLoading,
+        data: rewriteNewsTextData,
+        error: rewriteNewsTextError,
+    }] = useAIFlow<{ answer: string }>({
+        flowType: FLOW_TYPES.NEWS_REWRITE_TEXT,
+    })
+
+    useEffect(() => {
+        setRewriteNewsText(rewriteNewsTextData?.result?.answer ?? '')
+    }, [rewriteNewsTextData?.result?.answer])
+
+    useEffect(() => {
+        if (rewriteNewsText || rewriteNewsTextError) {
+            setNewsTextAiNotificationShow(true)
+        }
+    }, [rewriteNewsText, rewriteNewsTextError])
+
+    const hasNewsText = useMemo(() => value.length > 0, [value])
+
+    const handleRewriteNewsTextClick = useCallback(async () => {
+        const context = {
+            promptType: inputType,
+            title: inputType === 'title' ? value : textForContext,
+            body: inputType === 'body' ? value : textForContext,
+        }
+
+        analytics.track('click', {
+            value: inputType,
+            location: window.location.href,
+            component: 'Button',
+            type: 'news_rewrite_text_flow',
+        })
+
+        const result = await runRewriteNewsTextAIFlow({ context })
+
+        if (result.error) {
+            notification.error({ message: result.localizedErrorText || GenericErrorMessage })
+        }
+    }, [GenericErrorMessage, inputType, runRewriteNewsTextAIFlow, value, textForContext])
+
+    const handleCloseAINotificationText = useCallback(() => {
+        analytics.track('click', {
+            value: `${inputType}`,
+            type: 'close_ai_notification',
+            location: window.location.href,
+            component: 'Button',
+        })
+
+        setNewsTextAiNotificationShow(false)
+        setRewriteNewsText('')
+    }, [inputType])
+
+    const handleApplyGeneratedMessage = useCallback(() => {
+        analytics.track('click', {
+            value: `${inputType}`,
+            type: 'apply_generated_message',
+            location: window.location.href,
+            component: 'Button',
+        })
+
+        newsTextAreaRef.current?.focus?.()
+
+        handleCloseAINotificationText()
+        if (!rewriteNewsTextError?.cause) {
+            handleFormTextChange(rewriteNewsTextData?.result?.answer)
+        }
+    }, [inputType, handleCloseAINotificationText, rewriteNewsTextError?.cause, handleFormTextChange, rewriteNewsTextData?.result?.answer])
+
+    const handleRegenerateMessage = useCallback(async () => {
+        analytics.track('click', {
+            value: `${inputType}`,
+            type: 'regenerate_comment',
+            location: window.location.href,
+            component: 'Button',
+        })
+
+        await handleRewriteNewsTextClick()
+    }, [handleRewriteNewsTextClick, inputType])
+
+    const handleCopyTextClick = useCallback(async () => {
+        if (copied) return
+    
+        const plainText = useRichText ? stripMarkdown(value) : value
+    
+        try {
+            await navigator.clipboard.writeText(plainText)
+            setCopied(true)
+    
+            setTimeout(() => setCopied(false), REFRESH_COPY_BUTTON_INTERVAL_IN_MS)
+        } catch (e) {
+            console.error('Unable to copy to clipboard', e)
+        }
+    }, [copied, useRichText, value])
+
+    const bottomPanelUtils: RichTextAreaProps['bottomPanelUtils'] = [
+        <Tooltip
+            title={copied ? CopiedTooltipText : CopyTooltipText }
+            placement='top'
+            key='copyButton'
+        >
+            <Button
+                minimal
+                compact
+                type='secondary'
+                size='medium'
+                disabled={inputHasError || !hasNewsText || isRewriteNewsTextLoading}
+                onClick={handleCopyTextClick}
+                icon={copied ? (<CheckCircle size='small' />) : (<Copy size='small'/>) }
+            />
+        </Tooltip>,
+        'emoji',
+        ...(rewriteNewsTextEnabled ? [
+            <Button
+                key='improveButton'
+                compact
+                minimal
+                type='secondary'
+                size='medium'
+                disabled={inputHasError || !hasNewsText || isRewriteNewsTextLoading}
+                loading={isRewriteNewsTextLoading}
+                icon={<Sparkles size='small' />}
+                onClick={handleRewriteNewsTextClick}
+                className={classNames(styles.rewriteTextButton, styles.rewriteButtonWithText)}
+            >
+                {UpdateTextMessage}
+            </Button>,
+        ] : []),
+    ]
+    
+    return (
+        <AIInputNotification
+            updateLoading={isRewriteNewsTextLoading}
+            disableUpdateButton={inputHasError}
+            result={rewriteNewsText}
+            onApply={handleApplyGeneratedMessage}
+            errorMessage={rewriteNewsTextError && GenericErrorMessage}
+            onClose={handleCloseAINotificationText}
+            onUpdate={handleRegenerateMessage}
+            open={newsTextAiNotificationShow}
+        >
+            {useRichText ? (
+                <Input.RichTextArea
+                    placeholder={BodyPlaceholderMessage}
+                    onChange={handleFormTextChange}
+                    value={value}
+                    autoSize={{ minRows: 4, maxRows: 4 }}
+                    disabled={isRewriteNewsTextLoading}
+                    customLabels={{
+                        toolbar: toolbarLabels,
+                        emojiDropdown: emojiDropdownLabels,
+                        linkModal: linkModalLabels,
+                        bottomPanelLabels: bottomPanelLabels,
+                    }}
+                    type='inline'
+                    bottomPanelUtils={bottomPanelUtils}
+                />
+            ) : (
+                <Input.TextArea
+                    autoFocus={autoFocus}
+                    className='text-area-no-resize'
+                    placeholder={inputType === 'title' ? TitlePlaceholderMessage : BodyPlaceholderMessage}
+                    onChange={e => handleFormTextChange(e.target.value)}
+                    name={inputType}
+                    ref={newsTextAreaRef}
+                    value={value}
+                    autoSize={{ minRows: 2, maxRows: 5 }}
+                    disabled={isRewriteNewsTextLoading}
+                    customLabels={{
+                        emojiDropdown: emojiDropdownLabels,
+                        bottomPanelLabels: bottomPanelLabels,
+                    }}
+                    bottomPanelUtils={bottomPanelUtils}
+                />
+            )}
+        </AIInputNotification>
+    )
+}
+
+export const InputStepForm: React.FC<InputStepFormProps> = ({
+    sharingAppId,
+    newsSharingConfig,
+    isSharingStep,
+    selectedTitle,
+    selectedBody,
+    newsItemData,
+    templates,
+    processedInitialValues,
+    form,
+    autoFocusBody,
+    handleTemplateChange,
+    handleFormTitleChange,
+    template,
+    handleFormBodyChange,
+}) => {
+    const { useFlag } = useFeatureFlags()
+    const isNewsMarkdownEnabled = useFlag(UI_NEWS_MARKDOWN)
+
+    const { type: selectedType } = newsItemData
+
+    const intl = useIntl()
+
+    const MakeTextLabel = intl.formatMessage({ id: 'news.fields.makeText.label' })
+    const TitleErrorMessage = intl.formatMessage({ id: 'news.fields.title.error.length' })
+    const BodyErrorMessage = intl.formatMessage({ id: 'news.fields.body.error.length' })
+    const TemplateBlanksNotFilledErrorMessage = intl.formatMessage({ id: 'news.fields.template.blanksNotFilledError' })
+
+    const isCustomForm = !!newsSharingConfig?.customFormUrl && isSharingStep
+
+    const formFieldsColSpan = 24
+
+    const titleRule = useMemo(() => {
+        return [{
+            whitespace: true,
+            required: true,
+            message: TitleErrorMessage,
+        }, getTitleTemplateChangedRule(TemplateBlanksNotFilledErrorMessage),
+        ]}, [TitleErrorMessage, TemplateBlanksNotFilledErrorMessage])
+    const bodyRule = useMemo(() => {
+        return [{
+            whitespace: true,
+            required: true,
+            message: BodyErrorMessage,
+        }, getBodyTemplateChangedRule(TemplateBlanksNotFilledErrorMessage)]
+    }, [BodyErrorMessage, TemplateBlanksNotFilledErrorMessage])
+
+    const commonTemplates = useMemo(() => {
+        return Object.entries(templates || {}).reduce((result, [key, value]) => {
+            if (value.type === NEWS_TYPE_COMMON || value.type === null) {
+                result[key] = value
+            }
+            return result
+        }, {} as typeof templates)
+    }, [templates])
+
+    const emergencyTemplates = useMemo(() => {
+        return Object.entries(templates || {}).reduce((result, [key, value]) => {
+            if (value.type === NEWS_TYPE_EMERGENCY || value.type === null) {
+                result[key] = value
+            }
+            return result
+        }, {} as typeof templates)
+    }, [templates])
+
+
+    const emergencyTemplatesTabsProps = useMemo(() => Object.keys(emergencyTemplates).map(id => ({
+        key: id,
+        value: id,
+        label: emergencyTemplates[id].label || emergencyTemplates[id].title,
+        category: emergencyTemplates[id].category,
+    })), [emergencyTemplates])
+
+    const commonTemplatesTabsProps = useMemo(() => Object.keys(commonTemplates).map(id => ({
+        key: id,
+        value: id,
+        label: commonTemplates[id].label || commonTemplates[id].title,
+        category: commonTemplates[id].category,
+    })), [commonTemplates])
+
+    return (
+        <>
+            {
+                isCustomForm ? (
+                    <Col className={styles.customForm} span={formFieldsColSpan}>
+                        <B2BAppFrame
+                            src={
+                                `${newsSharingConfig.customFormUrl}?${[
+                                    `ctxId=${sharingAppId}`,
+                                    `title=${selectedTitle}`,
+                                    `body=${selectedBody}`,
+                                    `type=${newsItemData.type}`,
+                                    `initialValues=${JSON.stringify(processedInitialValues)}`,
+                                    `template=${JSON.stringify(template)}`,
+                                ].join('&')
+                                }`}
+                            reloadScope='organization'
+                        />
+                    </Col>
+                ) : (
+                    <Col span={formFieldsColSpan}>
+                        <Row gutter={[0, 40]}>
+                            <Col span={24}>
+                                <Row gutter={[0, 24]}>
+                                    <Col span={24}>
+                                        <Typography.Title level={2}>
+                                            {MakeTextLabel}
+                                        </Typography.Title>
+                                    </Col>
+
+                                    {templates && (
+                                        <Col span={24}>
+                                            <Form.Item
+                                                name='template'
+                                            >
+                                                {selectedType === NEWS_TYPE_COMMON && (
+                                                    <TemplatesSelect
+                                                        onChange={handleTemplateChange(form)}
+                                                        items={commonTemplatesTabsProps}
+                                                        hasCategories
+                                                    />
+                                                )}
+                                                {selectedType === NEWS_TYPE_EMERGENCY && (
+                                                    <TemplatesSelect
+                                                        onChange={handleTemplateChange(form)}
+                                                        items={emergencyTemplatesTabsProps}
+                                                        hasCategories
+                                                    />
+                                                )}
+                                            </Form.Item>
+                                        </Col>
+                                    )}
+                                </Row>
+                            </Col>
+
+                            <Col span={24}>
+                                <Row gutter={[0, 24]}>
+                                    <Col span={24}>
+                                        <Form.Item
+                                            name='title'
+                                            required
+                                            rules={titleRule}
+                                            validateFirst={true}
+                                            data-cy='news__create-title-input'
+                                        >
+                                            <DefaultAiTextArea
+                                                inputType='title'
+                                                value={selectedTitle}
+                                                textForContext={selectedBody}
+                                                handleFormTextChange={handleFormTitleChange(form)}
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={24}>
+                                        <Form.Item
+                                            name='body'
+                                            required
+                                            rules={bodyRule}
+                                            validateFirst={true}
+                                            data-cy='news__create-body-input'
+                                        >
+                                            <DefaultAiTextArea
+                                                inputType='body'
+                                                value={selectedBody}
+                                                textForContext={selectedTitle}
+                                                handleFormTextChange={handleFormBodyChange(form)}
+                                                autoFocus={autoFocusBody}
+                                                useRichText={isNewsMarkdownEnabled}
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                            </Col>
+                        </Row>
+                    </Col>
+                )
+            }
+        </>
+    )
+}

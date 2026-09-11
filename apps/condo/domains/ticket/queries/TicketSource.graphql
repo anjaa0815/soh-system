@@ -1,0 +1,7 @@
+query getTicketSources ($where: TicketSourceWhereInput) {
+    sources: allTicketSources (where: $where) {
+        id
+        name
+        isDefault
+    }
+}

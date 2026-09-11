@@ -1,0 +1,252 @@
+import { Row, Col, RowProps } from 'antd'
+import React, { useCallback, useMemo, useState } from 'react'
+
+import { useFeatureFlags } from '@open-condo/featureflags/FeatureFlagsContext'
+import { useIntl } from '@open-condo/next/intl'
+import { Button, Card, Checkbox, Modal, Typography } from '@open-condo/ui'
+
+import { useLayoutContext } from '@condo/domains/common/components/LayoutContext'
+import { UI_HIDE_PAID_FEATURES } from '@condo/domains/common/constants/featureflags'
+
+
+export type PaymentType = 'card' | 'userHelpRequest'
+
+interface UseSubscriptionPaymentModalProps {
+    registerSubscriptionContext: (params: { paymentType: PaymentType }) => Promise<void> | void
+    activateLoading: boolean
+}
+
+interface UseSubscriptionPaymentModalReturn {
+    PaymentModal: React.ReactNode
+    openModal: () => void
+    closeModal: () => void
+}
+
+const MEDIUM_VERTICAL_GUTTER: RowProps['gutter'] = [0, 24]
+const CUSTOM_CHECKBOX_CONTENT_GUTTER: RowProps['gutter'] = [0, 12]
+const CUSTOM_CHECKBOXES_DESKTOP_WRAPPER_GUTTER: RowProps['gutter'] = [24, 0]
+const CUSTOM_CHECKBOXES_MOBILE_WRAPPER_GUTTER: RowProps['gutter'] = [0, 16]
+
+const CARD_EMOJI = '💳'
+const INVOICE_EMOJI = '📃'
+
+export const useSubscriptionPaymentModal = ({
+    registerSubscriptionContext,
+    activateLoading,
+}: UseSubscriptionPaymentModalProps): UseSubscriptionPaymentModalReturn => {
+    const intl = useIntl()
+    const { useFlag } = useFeatureFlags()
+    const hidePaidFeatures = useFlag(UI_HIDE_PAID_FEATURES)
+    const ModalTitleMessage = intl.formatMessage({ id: 'subscription.paymentModal.title' })
+    const CardOnlineMessage = intl.formatMessage({ id: 'subscription.paymentModal.cardOnline' })
+    const InvoiceMessage = intl.formatMessage({ id: 'subscription.paymentModal.invoice' })
+    const CardSaveNoticeMessage = intl.formatMessage({ id: 'subscription.paymentModal.cardSaveNotice' })
+    const ProceedToPaymentMessage = intl.formatMessage({ id: 'subscription.paymentModal.proceedToPayment' })
+    const IssueInvoiceMessage = intl.formatMessage({ id: 'subscription.paymentModal.issueInvoice' })
+
+    const { breakpoints } = useLayoutContext()
+
+    const [open, setOpen] = useState<boolean>(false)
+    const [selectedMethod, setSelectedMethod] = useState<PaymentType>('card')
+
+    const openModal = useCallback(() => {
+        if (hidePaidFeatures) return
+        setSelectedMethod('card')
+        setOpen(true)
+    }, [hidePaidFeatures])
+
+    const closeModal = useCallback(() => {
+        setOpen(false)
+        setSelectedMethod('card')
+    }, [])
+
+    const handleCardSelect = useCallback(() => {
+        setSelectedMethod('card')
+    }, [])
+
+    const handleUserHelpRequestSelect = useCallback(() => {
+        setSelectedMethod('userHelpRequest')
+    }, [])
+
+    const handleProceedToPayment = useCallback(async () => {
+        await registerSubscriptionContext({ paymentType: 'card' })
+        closeModal()
+    }, [registerSubscriptionContext, closeModal])
+
+    const handleCreateUserHelpRequest = useCallback(async () => {
+        await registerSubscriptionContext({ paymentType: 'userHelpRequest' })
+        closeModal()
+    }, [registerSubscriptionContext, closeModal])
+
+    const PaymentModal = useMemo(() => {
+        if (hidePaidFeatures) return null
+
+        const isCardSelected = selectedMethod === 'card'
+        const isUserHelpRequestSelected = selectedMethod === 'userHelpRequest'
+
+        const footerButton = isCardSelected ? (
+            <Button
+                id='subscription-payment-modal-proceed-to-payment-button'
+                type='primary'
+                onClick={handleProceedToPayment}
+                disabled={activateLoading}
+            >
+                {ProceedToPaymentMessage}
+            </Button>
+        ) : (
+            <Button
+                id='subscription-payment-modal-issue-invoice-button'
+                type='primary'
+                onClick={handleCreateUserHelpRequest}
+                disabled={activateLoading}
+                loading={activateLoading}
+            >
+                {IssueInvoiceMessage}
+            </Button>
+        )
+
+        return (
+            <Modal
+                open={open}
+                onCancel={closeModal}
+                title={ModalTitleMessage}
+                footer={footerButton}
+            >
+                <Row gutter={MEDIUM_VERTICAL_GUTTER}>
+                    <Col span={24}>
+                        <Row gutter={breakpoints.TABLET_LARGE ? CUSTOM_CHECKBOXES_DESKTOP_WRAPPER_GUTTER : CUSTOM_CHECKBOXES_MOBILE_WRAPPER_GUTTER}>
+                            <Col span={breakpoints.TABLET_LARGE ? 12 : 24}>
+                                <Card
+                                    hoverable
+                                    bodyPadding={breakpoints.TABLET_LARGE ? '32px 8px' : 19}
+                                    active={isCardSelected}
+                                    onClick={handleCardSelect}
+                                >
+                                    {
+                                        breakpoints.TABLET_LARGE
+                                            ? (
+                                                <Row gutter={CUSTOM_CHECKBOX_CONTENT_GUTTER} justify='center'>
+                                                    <Col span={24}>
+                                                        <Row justify='center'>
+                                                            <Col>
+                                                                <Typography.Title level={1}>
+                                                                    {CARD_EMOJI}
+                                                                </Typography.Title>
+                                                            </Col>
+                                                        </Row>
+                                                    </Col>
+                                                    <Col span={24}>
+                                                        <Row justify='center'>
+                                                            <Col>
+                                                                <Typography.Paragraph>
+                                                                    {CardOnlineMessage}
+                                                                </Typography.Paragraph>
+                                                            </Col>
+                                                        </Row>
+                                                    </Col>
+                                                </Row>
+                                            )
+                                            : (
+                                                <Row justify='center' align='middle' gutter={[8, 0]}>
+                                                    <Col>
+                                                        <Typography.Title level={3}>
+                                                            {CARD_EMOJI}
+                                                        </Typography.Title>
+                                                    </Col>
+                                                    <Col>
+                                                        <Typography.Text>
+                                                            {CardOnlineMessage}
+                                                        </Typography.Text>
+                                                    </Col>
+                                                </Row>
+                                            )
+                                    }
+                                </Card>
+                            </Col>
+                            <Col span={breakpoints.TABLET_LARGE ? 12 : 24}>
+                                <Card
+                                    hoverable
+                                    bodyPadding={breakpoints.TABLET_LARGE ? '32px 8px' : 19}
+                                    active={isUserHelpRequestSelected}
+                                    onClick={handleUserHelpRequestSelect}
+                                >
+                                    {
+                                        breakpoints.TABLET_LARGE
+                                            ? (
+                                                <Row gutter={CUSTOM_CHECKBOX_CONTENT_GUTTER} justify='center'>
+                                                    <Col span={24}>
+                                                        <Row justify='center'>
+                                                            <Col>
+                                                                <Typography.Title level={1}>
+                                                                    {INVOICE_EMOJI}
+                                                                </Typography.Title>
+                                                            </Col>
+                                                        </Row>
+                                                    </Col>
+                                                    <Col span={24}>
+                                                        <Row justify='center'>
+                                                            <Col>
+                                                                <Typography.Paragraph>
+                                                                    {InvoiceMessage}
+                                                                </Typography.Paragraph>
+                                                            </Col>
+                                                        </Row>
+                                                    </Col>
+                                                </Row>
+                                            )
+                                            : (
+                                                <Row justify='center' align='middle' gutter={[8, 0]}>
+                                                    <Col>
+                                                        <Typography.Title level={3}>
+                                                            {INVOICE_EMOJI}
+                                                        </Typography.Title>
+                                                    </Col>
+                                                    <Col>
+                                                        <Typography.Text>
+                                                            {InvoiceMessage}
+                                                        </Typography.Text>
+                                                    </Col>
+                                                </Row>
+                                            )
+                                    }
+                                </Card>
+                            </Col>
+                        </Row>
+                    </Col>
+                    {isCardSelected && (
+                        <Col span={24}>
+                            <Checkbox
+                                label={CardSaveNoticeMessage}
+                                checked
+                                disabled
+                            />
+                        </Col>
+                    )}
+                </Row>
+            </Modal>
+        )
+    }, [
+        ModalTitleMessage,
+        CardOnlineMessage,
+        InvoiceMessage,
+        CardSaveNoticeMessage,
+        ProceedToPaymentMessage,
+        IssueInvoiceMessage,
+        hidePaidFeatures,
+        breakpoints.TABLET_LARGE,
+        open,
+        selectedMethod,
+        activateLoading,
+        closeModal,
+        handleCardSelect,
+        handleUserHelpRequestSelect,
+        handleProceedToPayment,
+        handleCreateUserHelpRequest,
+    ])
+
+    return {
+        PaymentModal,
+        openModal,
+        closeModal,
+    }
+}

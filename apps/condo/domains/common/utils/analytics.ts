@@ -1,0 +1,196 @@
+import getConfig from 'next/config'
+
+import { Analytics, isSSR, isDebug } from '@open-condo/miniapp-utils'
+import type { AnalyticsPlugin } from '@open-condo/miniapp-utils'
+
+import { postHogAnalyticsPlugin } from '@condo/domains/common/utils/analyticsPlugins/postHog'
+import { yMetrikaAnalyticsPlugin } from '@condo/domains/common/utils/analyticsPlugins/yMetrika'
+
+const nextConfig = getConfig()
+
+const appName = nextConfig?.publicRuntimeConfig?.appName
+const currentVersion = nextConfig?.publicRuntimeConfig?.currentVersion
+const posthogApiHost = nextConfig?.publicRuntimeConfig?.posthogApiHost
+const posthogApiKey = nextConfig?.publicRuntimeConfig?.posthogApiKey
+const yandexMetrikaID = nextConfig?.publicRuntimeConfig?.yandexMetrikaID
+
+// TODO: Remove the types after components replaces with ones from @open-condo/ui
+
+type CommonLegacyComponentProps = {
+    location: string
+    id?: string
+}
+
+type ButtonClickEventData = CommonLegacyComponentProps & {
+    value?: string
+    type?: string
+    component: 'Button'
+}
+
+type MenuItemClickEventData = CommonLegacyComponentProps & {
+    id: string
+    component: 'MenuItem'
+}
+
+type GQLInputChangeEventData = CommonLegacyComponentProps & {
+    value: string | Array<string>
+    component: 'GraphQLSearchInput'
+}
+
+type DateRangeChangeEventData = CommonLegacyComponentProps & {
+    from: string
+    to: string
+    id: string
+    component: 'DateRangePicker'
+}
+
+type TabsChangeEventData = CommonLegacyComponentProps & {
+    activeKey: string
+    component: 'Tabs'
+}
+
+type SelectChangeEventData = CommonLegacyComponentProps & {
+    component: 'Select'
+    value: string | Array<string>
+}
+
+type CheckboxCheckEventData = CommonLegacyComponentProps & {
+    component: 'Checkbox'
+    value: string
+}
+
+type RadioCheckEventData = CommonLegacyComponentProps & {
+    component: 'Radio'
+    value: string
+}
+
+type TicketExportToPdfEventData = {
+    selectedCommentCount: 'all' | 'nothing' | 'some'
+    haveAllComments: boolean
+    haveListCompletedWorks: boolean
+    haveConsumedMaterials: boolean
+    haveTotalCostWork: boolean
+    selectedTicketsCount: number | null
+    mode: 'single' | 'multiple' | null
+}
+
+type SurveyModalData = {
+    $survey_id: string
+    $survey_name: string
+}
+
+type AiAssistantMessageSendEventData = {
+    source: 'typed' | 'scenario_button' | 'suggestion'
+    is_first_in_session: boolean
+    location: string
+    attachments_count: number
+    button_id?: string
+    button_name?: string
+}
+
+type AiAssistantAttachmentUploadEventData = {
+    mime_type: string
+    size: number
+}
+
+type AiSuggestionsFailureEventData = {
+    reason: 'missing_block' | 'empty_after_parse' | 'service_text_leaked'
+    session_id: string
+    message_id: string
+    suggestions_count_parsed: number
+}
+
+export type EventsData = {
+    'click': ButtonClickEventData | MenuItemClickEventData
+    'change': GQLInputChangeEventData | DateRangeChangeEventData | TabsChangeEventData | SelectChangeEventData
+    'check': CheckboxCheckEventData | RadioCheckEventData
+    'ticket_comment_submit': Record<string, never>
+    'import_complete': Record<string, never>
+    'file_upload': { fileId: string, location: string }
+    'file_conversion': {
+        originalFileSizeInBytes: number
+        originalFileMimetype: string
+        convertedFileSizeInBytes: number
+        convertedFileMimetype: string
+        totalTimeInSec: number
+    }
+    'miniapp_session_start': { appId: string, startedAt: string }
+    'miniapp_session_end': { appId: string, startedAt: string, durationInSec: number }
+    'news_template_change': { title: string, body: string }
+    'ticket_export_to_pdf_task_start': TicketExportToPdfEventData
+    'ticket_share_click': { destination: string }
+    'ticket_status_filter_click': { status: string }
+    'notification_view': { id?: string, type: string }
+    'notifications_list_view': Record<string, never>
+    'tour_step_complete': { activeStep: string, type: string }
+    'filter_changed': { location: string }
+    'incident_status_update': { newStatus: string }
+    'ticket_set_favourite_click': Record<string, never>
+    'confirm_phone_registration': Record<string, never>
+    'confirm_email_registration': Record<string, never>
+    'register_user': { userId: string }
+    'create_organization': { organizationId: string }
+    'ai_assistant_close': { aiSessionId: string }
+    'ai_assistant_open_click': Record<string, never>
+    'ai_assistant_message_send': AiAssistantMessageSendEventData
+    'ai_assistant_attachment_upload': AiAssistantAttachmentUploadEventData
+    'ai_assistant_reset_history': { aiSessionId: string }
+    'ai_suggestions_failure': AiSuggestionsFailureEventData
+    'subscription_purchase_click': {
+        paymentMethod: 'card' | 'userHelpRequest'
+        planId: string | null
+        planName: string | null
+        priceAmount: number | null
+        period: string | null
+    }
+    'survey sent': SurveyModalData
+    'survey shown': SurveyModalData
+    'survey dismissed': SurveyModalData
+}
+
+type UserData = {
+    name?: string | null
+    type?: string | null
+    role?: string | null
+    'organization.id'?: string | null
+}
+
+type AppGroups =
+    'organization.id' |
+    'organization.type' |
+    'organization.tin' |
+    'employee.role'
+
+function initAnalytics (): Analytics<EventsData, UserData, AppGroups> {
+    const plugins: Array<AnalyticsPlugin> = []
+
+    if (posthogApiKey && posthogApiHost && !isSSR()) {
+        plugins.push(postHogAnalyticsPlugin({
+            enabled: true,
+            token: posthogApiKey,
+            options: {
+                // TODO(SavelevMatthew): replace this back to proxy once you've figured out,
+                //  why 308 are not followed correctly
+                // api_host: '/api/ph',
+                api_host: posthogApiHost,
+                opt_in_site_apps: true,
+                advanced_enable_surveys: true,
+                debug: isDebug(),
+                autocapture: false,
+            },
+        }))
+    }
+
+    if (yandexMetrikaID && !isSSR()) {
+        plugins.push(yMetrikaAnalyticsPlugin)
+    }
+
+    return new Analytics<EventsData, UserData, AppGroups>({
+        app: appName,
+        version: currentVersion,
+        debug: isDebug(),
+        plugins,
+    })
+}
+
+export const analytics = initAnalytics()
