@@ -1,0 +1,140 @@
+const path = require('path')
+
+const { faker } = require('@faker-js/faker')
+const set = require('lodash/set')
+
+
+const {
+    prepareCondoAppOidcConfig,
+    prepareAppEnvLocalAdminUsers,
+    getAppEnvValue,
+    updateAppEnvFile,
+    safeExec,
+    registerAppProxy,
+} = require('@open-condo/cli')
+const { prepareKeystoneExpressApp } = require('@open-condo/keystone/prepareKeystoneApp')
+
+const { User } = require('@dev-portal-api/domains/user/utils/serverSchema')
+
+const APP_NAME = path.basename(path.resolve(__dirname, '..'))
+const BOT_RIGHTS_SET = JSON.stringify({
+    name: '[DEV-PORTAL] Service bot permissions',
+    canReadB2BApps: true,
+    canReadB2BAppContexts: true,
+    canReadB2BAppAccessRights: true,
+    canReadB2BAppAccessRightSets: true,
+    canReadB2BAppPermissions: true,
+    canReadB2BAppNewsSharingConfigs: true,
+    canReadB2CApps: true,
+    canReadB2CAppAccessRights: true,
+    canReadB2CAppBuilds: true,
+    canReadB2CAppProperties: true,
+    canReadOidcClients: true,
+    canReadOrganizations: true,
+    canReadUsers: true,
+    canReadUserEmailField: true,
+
+    canManageB2BApps: true,
+    canManageB2BAppContexts: true,
+    canManageB2BAppAccessRights: true,
+    canManageB2BAppAccessRightSets: true,
+    canManageB2BAppPermissions: true,
+    canManageB2BAppNewsSharingConfigs: true,
+    canManageB2CApps: true,
+    canManageB2CAppAccessRights: true,
+    canManageB2CAppBuilds: true,
+    canManageB2CAppProperties: true,
+    canManageOidcClients: true,
+
+    canExecuteRegisterNewServiceUser: true,
+    canExecuteSendMessage: true,
+})
+
+async function main () {
+    const { keystone: context } = await prepareKeystoneExpressApp(path.resolve('./index.js'), { excludeApps: ['AdminUIApp'] })
+
+    // STEP 1. Register local users
+    const { adminUserIdentity } = await prepareAppEnvLocalAdminUsers(APP_NAME, 'phone')
+
+    // STEP 2. Register proxies
+    const { proxySecret, proxyId } = await registerAppProxy('condo', 'dev-portal-api')
+    await updateAppEnvFile(APP_NAME, 'CONDO_PROXY_CONFIG', JSON.stringify({ proxyId, proxySecret }))
+
+    // STEP 3. Prepare file service
+    await updateAppEnvFile('condo', 'FILE_UPLOAD_CONFIG', (prev) => {
+        const newValue = JSON.parse(prev || '{"clients": {}}')
+        set(newValue, ['clients', APP_NAME], { secret: APP_NAME + '-secret' })
+        return JSON.stringify(newValue)
+    })
+    await updateAppEnvFile(APP_NAME, 'FILE_CLIENT_ID', APP_NAME)
+    await updateAppEnvFile(APP_NAME, 'FILE_SECRET', APP_NAME + '-secret')
+
+    // STEP 4. Register bots
+    const condoUrl = await getAppEnvValue(APP_NAME, 'CONDO_DOMAIN')
+    const devBotEnvValue = await getAppEnvValue(APP_NAME, 'CONDO_DEV_BOT_CONFIG')
+    const devBotConfig = devBotEnvValue ? JSON.parse(devBotEnvValue) : {
+        email: 'dev-bot@dev.api',
+        password: faker.internet.password(16),
+    }
+    devBotConfig.apiUrl = `${condoUrl}/admin/api`
+    await updateAppEnvFile(APP_NAME, 'CONDO_DEV_BOT_CONFIG', JSON.stringify(devBotConfig))
+
+    const prodBotEnvValue = await getAppEnvValue(APP_NAME, 'CONDO_PROD_BOT_CONFIG')
+    const prodBotConfig = prodBotEnvValue ? JSON.parse(prodBotEnvValue) : {
+        email: 'prod-bot@dev.api',
+        password: faker.internet.password(16),
+    }
+    prodBotConfig.apiUrl = `${condoUrl}/admin/api`
+    await updateAppEnvFile(APP_NAME, 'CONDO_PROD_BOT_CONFIG', JSON.stringify(prodBotConfig))
+
+    const devBotOptions = JSON.stringify({ type: 'service', password: devBotConfig.password, name: '[DEV-PORTAL] Dev bot' })
+    const prodBotOptions = JSON.stringify({ type: 'service', password: prodBotConfig.password, name: '[DEV-PORTAL] Prod bot' })
+    const { stdout: devUserOut } = await safeExec(`yarn workspace @app/condo node bin/create-user.js ${JSON.stringify(devBotConfig.email)} ${JSON.stringify(devBotOptions)} ${JSON.stringify(BOT_RIGHTS_SET)}`)
+    const { stdout: prodUserOut } = await safeExec(`yarn workspace @app/condo node bin/create-user.js ${JSON.stringify(prodBotConfig.email)} ${JSON.stringify(prodBotOptions)} ${JSON.stringify(BOT_RIGHTS_SET)}`)
+
+    const devLines = devUserOut.trim().split('\n')
+    const prodLines = prodUserOut.trim().split('\n')
+    const { id: devBotId } = JSON.parse(devLines[devLines.length - 1])
+    const { id: prodBotId } = JSON.parse(prodLines[prodLines.length - 1])
+
+    // STEP 5. Register OIDC client
+    const portalWebDomain = await getAppEnvValue(APP_NAME, 'DEV_PORTAL_WEB_DOMAIN')
+    const portalApiDomain = await getAppEnvValue(APP_NAME, 'DEV_PORTAL_API_DOMAIN')
+    const webRedirectUrl = `${portalWebDomain}/api/oidc/callback`
+    const apiRedirectUrl = `${portalApiDomain}/api/oidc/callback`
+    const oidcConf = await prepareCondoAppOidcConfig(APP_NAME, { redirectUrl: [webRedirectUrl, apiRedirectUrl] })
+    await updateAppEnvFile(APP_NAME, 'OIDC_CONDO_CLIENT_CONFIG', JSON.stringify({ ...oidcConf, scope: 'openid phone' }))
+    await updateAppEnvFile(APP_NAME, 'ENABLE_DIRECT_OIDC', 'true')
+
+    const adminUser = await User.getOne(context, { phone: adminUserIdentity, isAdmin: true })
+
+    // STEP 6. Bypass file rate-limits
+    await updateAppEnvFile('condo', 'FILE_UPLOAD_CONFIG', (prev) => {
+        const newValue = JSON.parse(prev || '{}')
+        if (!newValue.quota) {
+            newValue.quota = {}
+        }
+        if (!newValue.quota.whitelist) {
+            newValue.quota.whitelist = []
+        }
+        if (!newValue.quota.whitelist.includes(devBotId)) {
+            newValue.quota.whitelist.push(devBotId)
+        }
+        if (!newValue.quota.whitelist.includes(prodBotId)) {
+            newValue.quota.whitelist.push(prodBotId)
+        }
+
+        if (adminUser && adminUser.id && !newValue.quota.whitelist.includes(adminUser.id)) {
+            newValue.quota.whitelist.push(adminUser.id)
+        }
+        return JSON.stringify(newValue)
+    })
+}
+
+main().then(() => {
+    console.log('done')
+    process.exit()
+}).catch((err) => {
+    console.error(err)
+    process.exit(1)
+})

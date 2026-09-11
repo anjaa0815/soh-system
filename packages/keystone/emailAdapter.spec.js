@@ -1,0 +1,1325 @@
+jest.mock('@open-condo/keystone/fetch', () => ({ fetch: jest.fn() }))
+
+const { EventEmitter } = require('events')
+const https = require('https')
+const { Readable } = require('stream')
+
+const { fetch } = require('@open-condo/keystone/fetch')
+
+const {
+    EmailAdapter,
+    isEmailAdapterConfigured,
+    EMAIL_ADAPTER_TYPE_MAILGUN,
+    EMAIL_ADAPTER_TYPE_SENDSAY,
+    EMAIL_ADAPTER_TYPE_UNISENDER_GO,
+} = require('./emailAdapter')
+
+const MAILGUN_CONFIG = {
+    api_url: 'https://api.mailgun.net/v3/example.com/messages',
+    token: 'test-mailgun-token',
+    from: 'Condo <noreply@example.com>',
+    useTags: true,
+    useAttachingData: true,
+}
+
+const UNISENDER_GO_CONFIG = {
+    type: EMAIL_ADAPTER_TYPE_UNISENDER_GO,
+    api_url: 'https://go1.unisender.ru/ru/transactional/api/v1',
+    token: 'test-unisender-api-key',
+    from: 'Condo <noreply@example.com>',
+    useTags: true,
+    useAttachingData: true,
+}
+
+const SENDSAY_CONFIG = {
+    type: EMAIL_ADAPTER_TYPE_SENDSAY,
+    api_url: 'https://api.sendsay.ru/general/api/v100/json',
+    login: 'shared-login',
+    sublogin: 'project-sublogin',
+    passwd: 'super-secret',
+    from: 'Condo <noreply@example.com>',
+    useTags: true,
+    useAttachingData: true,
+}
+
+const ENV_KEYS = ['EMAIL_API_CONFIG']
+const ATTACHMENT_URL = 'https://files.example.com/doc.txt'
+const ATTACHMENT_CONTENT = 'attachment-body'
+
+const createJsonResponse = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: jest.fn().mockResolvedValue(body),
+    text: jest.fn().mockResolvedValue(JSON.stringify(body)),
+})
+
+const mockHttpsGetWithStream = ({ content = ATTACHMENT_CONTENT, statusCode = 200, error } = {}) => {
+    return jest.spyOn(https, 'get').mockImplementation((url, callback) => {
+        const request = new EventEmitter()
+        request.destroy = jest.fn((err) => {
+            if (err) {
+                process.nextTick(() => request.emit('error', err))
+            }
+        })
+
+        process.nextTick(() => {
+            if (error) {
+                request.emit('error', error)
+                return
+            }
+            const stream = Readable.from([Buffer.from(content)])
+            stream.statusCode = statusCode
+            callback(stream)
+        })
+
+        return request
+    })
+}
+
+const mockHttpsGetOversizedStream = () => {
+    return jest.spyOn(https, 'get').mockImplementation((url, callback) => {
+        const request = new EventEmitter()
+        request.destroy = jest.fn()
+
+        process.nextTick(() => {
+            const chunk = Buffer.alloc(1024 * 1024)
+            async function * oversized () {
+                for (let i = 0; i < 11; i++) {
+                    yield chunk
+                }
+            }
+            const stream = Readable.from(oversized())
+            stream.statusCode = 200
+            callback(stream)
+        })
+
+        return request
+    })
+}
+
+describe('Email adapters', () => {
+    const originalEnv = {}
+
+    beforeAll(() => {
+        ENV_KEYS.forEach((key) => {
+            originalEnv[key] = process.env[key]
+        })
+    })
+
+    afterEach(() => {
+        jest.clearAllMocks()
+        jest.restoreAllMocks()
+        ENV_KEYS.forEach((key) => {
+            if (originalEnv[key] === undefined) {
+                delete process.env[key]
+            } else {
+                process.env[key] = originalEnv[key]
+            }
+        })
+    })
+
+    describe('Mailgun adapter', () => {
+        beforeEach(() => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify(MAILGUN_CONFIG)
+        })
+
+        it('marks adapter as configured when EMAIL_API_CONFIG is valid', () => {
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(true)
+            expect(adapter.provider).toBe(EMAIL_ADAPTER_TYPE_MAILGUN)
+        })
+
+        it('treats type=mailgun the same as omitted type', () => {
+            const adapter = new EmailAdapter({
+                ...MAILGUN_CONFIG,
+                type: EMAIL_ADAPTER_TYPE_MAILGUN,
+            })
+            expect(adapter.isConfigured).toBe(true)
+            expect(adapter.provider).toBe(EMAIL_ADAPTER_TYPE_MAILGUN)
+        })
+
+        it('marks adapter as not configured when EMAIL_API_CONFIG is missing required fields', () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({ api_url: 'https://example.com' })
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(false)
+        })
+
+        it('supports valid emails and rejects values without @', () => {
+            const adapter = new EmailAdapter()
+            expect(adapter.isEmailSupported('user@example.com')).toBe(true)
+            expect(adapter.isEmailSupported('Bob <bob@host.com>')).toBe(true)
+            expect(adapter.isEmailSupported('not-an-email')).toBe(false)
+        })
+
+        it('throws when required send arguments are missing', async () => {
+            const adapter = new EmailAdapter()
+
+            await expect(adapter.send({ to: 'user@example.com', subject: 'Hi' }))
+                .rejects.toThrow('no text or html argument')
+            await expect(adapter.send({ to: 'user@example.com', text: 'Hi' }))
+                .rejects.toThrow('no subject argument')
+            await expect(adapter.send({ subject: 'Hi', text: 'body' }))
+                .rejects.toThrow('unsupported to argument format')
+        })
+
+        it('sends message via Mailgun form API and returns success metadata', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, { id: '<mailgun-id>', message: 'Queued. Thank you.' }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                emailFrom: 'support@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+                html: '<p>HTML</p>',
+                messageType: 'INVITE_NEW_EMPLOYEE',
+                meta: { attachingData: { ticketId: '42' } },
+            })
+
+            expect(isOk).toBe(true)
+            expect(context).toEqual({ id: '<mailgun-id>', message: 'Queued. Thank you.' })
+            expect(fetch).toHaveBeenCalledTimes(1)
+
+            const [calledUrl, calledOpts] = fetch.mock.calls[0]
+            expect(calledUrl).toBe(MAILGUN_CONFIG.api_url)
+            expect(calledOpts.method).toBe('POST')
+            expect(calledOpts.headers.Authorization).toMatch(/^Basic /)
+            expect(calledOpts.body).toBeDefined()
+        })
+
+        it('returns false with status payload when Mailgun responds with non-200', async () => {
+            fetch.mockResolvedValue({
+                ok: false,
+                status: 401,
+                json: jest.fn(),
+                text: jest.fn().mockResolvedValue('Forbidden'),
+            })
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+            })
+
+            expect(isOk).toBe(false)
+            expect(context).toEqual({ text: 'Forbidden', status: 401 })
+        })
+
+        it('checkIsAvailable returns false on auth errors', async () => {
+            fetch.mockResolvedValue({ ok: false, status: 401 })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.checkIsAvailable()).resolves.toBe(false)
+        })
+
+        it('checkIsAvailable returns true when endpoint responds with 405', async () => {
+            fetch.mockResolvedValue({ ok: false, status: 405 })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.checkIsAvailable()).resolves.toBe(true)
+        })
+
+        it('checkIsAvailable returns false for unexpected statuses', async () => {
+            fetch.mockResolvedValue({ ok: false, status: 404 })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.checkIsAvailable()).resolves.toBe(false)
+        })
+
+        it('treats HTTP 200 as sent even when Mailgun body is not JSON', async () => {
+            fetch.mockResolvedValue({
+                ok: true,
+                status: 200,
+                text: jest.fn().mockResolvedValue('Queued. Thank you.'),
+            })
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context).toEqual({ text: 'Queued. Thank you.' })
+        })
+
+        it('downloads meta.attachments and includes them in the Mailgun request', async () => {
+            mockHttpsGetWithStream({ content: ATTACHMENT_CONTENT })
+            fetch.mockResolvedValue(createJsonResponse(200, { id: '<mailgun-id>', message: 'Queued. Thank you.' }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })
+
+            expect(isOk).toBe(true)
+            expect(https.get).toHaveBeenCalledWith(ATTACHMENT_URL, expect.any(Function))
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(fetch.mock.calls[0][1].body).toBeDefined()
+        })
+
+        it('includes meta.inlineAttachments as Mailgun inline parts', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, { id: '<mailgun-id>', message: 'Queued. Thank you.' }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'With logo',
+                html: '<img src="cid:logo.png" />',
+                meta: {
+                    inlineAttachments: [{
+                        buffer: Buffer.from('logo-bytes'),
+                        mimetype: 'image/png',
+                        originalFilename: 'logo.png',
+                    }],
+                },
+            })
+
+            expect(isOk).toBe(true)
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(fetch.mock.calls[0][1].body).toBeDefined()
+        })
+
+        it('skips provider call when doNotSendEmails is enabled', async () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                ...MAILGUN_CONFIG,
+                doNotSendEmails: true,
+            })
+
+            const adapter = new EmailAdapter()
+            expect(adapter.doNotSendEmails).toBe(true)
+
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Skipped',
+                text: 'Should not send',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context).toEqual({ skipped: true, doNotSendEmails: true })
+            expect(fetch).not.toHaveBeenCalled()
+        })
+
+        it('allows doNotSendEmails without api_url for local prepare stubs', async () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                from: 'test@gmail.com',
+                doNotSendEmails: true,
+            })
+
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(true)
+            expect(isEmailAdapterConfigured()).toBe(true)
+
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Skipped',
+                text: 'Should not send',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context).toEqual({ skipped: true, doNotSendEmails: true })
+            expect(fetch).not.toHaveBeenCalled()
+        })
+
+        it('fails send when attachment download returns status >= 400', async () => {
+            mockHttpsGetWithStream({ statusCode: 404 })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })).rejects.toThrow('Failed to download attachment: 404')
+        })
+
+        it('fails send when attachment download request errors', async () => {
+            mockHttpsGetWithStream({ error: new Error('socket hang up') })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })).rejects.toThrow('socket hang up')
+        })
+
+        it('fails send when attachment exceeds maximum size', async () => {
+            mockHttpsGetOversizedStream()
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'application/octet-stream',
+                        originalFilename: 'big.bin',
+                    }],
+                },
+            })).rejects.toThrow('Attachment exceeds maximum size')
+        })
+
+        it('applies maxAttachmentSizeBytes from EMAIL_API_CONFIG', async () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                ...MAILGUN_CONFIG,
+                maxAttachmentSizeBytes: 4,
+            })
+            mockHttpsGetWithStream({ content: 'too-big' })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })).rejects.toThrow('Attachment exceeds maximum size of 4 bytes')
+        })
+    })
+
+    describe('Unisender Go adapter', () => {
+        beforeEach(() => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify(UNISENDER_GO_CONFIG)
+        })
+
+        it('marks adapter as configured when EMAIL_API_CONFIG type is unisendergo', () => {
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(true)
+            expect(adapter.provider).toBe(EMAIL_ADAPTER_TYPE_UNISENDER_GO)
+        })
+
+        it('marks adapter as not configured when EMAIL_API_CONFIG is incomplete', () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                type: EMAIL_ADAPTER_TYPE_UNISENDER_GO,
+                api_url: 'https://go1.unisender.ru/ru/transactional/api/v1',
+            })
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(false)
+        })
+
+        it('sends JSON payload to email/send.json with required fields', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                status: 'success',
+                job_id: '1ZymBc-00041N-9X',
+                emails: ['user@example.com'],
+            }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                emailFrom: 'Support <support@example.com>',
+                subject: 'Hello from Unisender',
+                text: 'Plain text',
+                html: '<b>HTML</b>',
+                messageType: 'SHARE_TICKET',
+                meta: { attachingData: { organizationId: 'org-1' } },
+            })
+
+            expect(isOk).toBe(true)
+            expect(context.status).toBe('success')
+            expect(context.job_id).toBe('1ZymBc-00041N-9X')
+            expect(fetch).toHaveBeenCalledTimes(1)
+
+            const [calledUrl, calledOpts] = fetch.mock.calls[0]
+            expect(calledUrl).toBe(`${UNISENDER_GO_CONFIG.api_url}/email/send.json`)
+            expect(calledOpts.method).toBe('POST')
+            expect(calledOpts.headers).toEqual({
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-API-KEY': UNISENDER_GO_CONFIG.token,
+            })
+
+            const body = JSON.parse(calledOpts.body)
+            expect(body.message).toMatchObject({
+                recipients: [{ email: 'user@example.com' }],
+                from_email: 'noreply@example.com',
+                from_name: 'Condo',
+                subject: 'Hello from Unisender',
+                reply_to: 'support@example.com',
+                reply_to_name: 'Support',
+                tags: ['SHARE_TICKET'],
+                body: {
+                    html: '<b>HTML</b>',
+                    plaintext: 'Plain text',
+                },
+                global_metadata: {
+                    attachingData: JSON.stringify({ organizationId: 'org-1' }),
+                },
+            })
+            expect(body.message.headers).toBeUndefined()
+        })
+
+        it('parses named and comma-separated recipients and sets To/CC headers', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                status: 'success',
+                job_id: 'job-2',
+                emails: ['bob@host.com', 'cc@host.com'],
+            }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'Bob <bob@host.com>',
+                cc: 'Copy <cc@host.com>',
+                bcc: 'bcc@host.com',
+                subject: 'With copies',
+                html: '<p>Hi</p>',
+            })
+
+            expect(isOk).toBe(true)
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.message.recipients).toEqual([
+                { email: 'bob@host.com' },
+                { email: 'cc@host.com' },
+                { email: 'bcc@host.com' },
+            ])
+            expect(body.message.headers).toEqual({
+                To: 'Bob <bob@host.com>',
+                CC: 'Copy <cc@host.com>',
+            })
+        })
+
+        it('normalizes trailing slash in api_url', async () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                ...UNISENDER_GO_CONFIG,
+                api_url: `${UNISENDER_GO_CONFIG.api_url}/`,
+            })
+            fetch.mockResolvedValue(createJsonResponse(200, { status: 'success', job_id: 'job-3', emails: ['user@example.com'] }))
+
+            const adapter = new EmailAdapter()
+            await adapter.send({
+                to: 'user@example.com',
+                subject: 'Slash',
+                text: 'ok',
+            })
+
+            expect(fetch.mock.calls[0][0]).toBe(`${UNISENDER_GO_CONFIG.api_url}/email/send.json`)
+        })
+
+        it('returns false when Unisender Go responds with error status', async () => {
+            fetch.mockResolvedValue(createJsonResponse(400, {
+                status: 'error',
+                code: 101,
+                message: 'Invalid API key',
+            }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+            })
+
+            expect(isOk).toBe(false)
+            expect(context.status).toBe(400)
+            expect(context.providerStatus).toBe('error')
+            expect(context.code).toBe(101)
+            expect(context.message).toBe('Invalid API key')
+            expect(context.text).toBeUndefined()
+        })
+
+        it('truncates messageType tags to Unisender Go 50-char limit', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                status: 'success',
+                job_id: 'job-tag',
+                emails: ['user@example.com'],
+            }))
+
+            const longType = 'RECURRENT_PAYMENT_PROCEEDING_ACQUIRING_PAYMENT_PROCEED_ERROR_MESSAGE'
+            expect(longType.length).toBeGreaterThan(50)
+
+            const adapter = new EmailAdapter()
+            await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+                messageType: longType,
+            })
+
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.message.tags).toEqual([longType.slice(0, 50)])
+        })
+
+        it('sends meta.inlineAttachments as Unisender inline_attachments and keeps cid in HTML', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                status: 'success',
+                job_id: 'job-inline',
+                emails: ['user@example.com'],
+            }))
+
+            const logoBytes = Buffer.from('logo-bytes')
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'With logo',
+                html: '<img src="cid:logo.png" />',
+                meta: {
+                    inlineAttachments: [{
+                        buffer: logoBytes,
+                        mimetype: 'image/png',
+                        originalFilename: 'logo.png',
+                    }],
+                },
+            })
+
+            expect(isOk).toBe(true)
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.message.body.html).toBe('<img src="cid:logo.png" />')
+            expect(body.message.inline_attachments).toEqual([{
+                type: 'image/png',
+                name: 'logo.png',
+                content: logoBytes.toString('base64'),
+            }])
+        })
+
+        it('returns false with raw text when response is not JSON', async () => {
+            fetch.mockResolvedValue({
+                ok: false,
+                status: 502,
+                json: jest.fn(),
+                text: jest.fn().mockResolvedValue('Bad Gateway'),
+            })
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+            })
+
+            expect(isOk).toBe(false)
+            expect(context).toEqual({ text: 'Bad Gateway', status: 502 })
+        })
+
+        it('merges extendedParams into Unisender message payload', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, { status: 'success', job_id: 'job-4', emails: ['user@example.com'] }))
+
+            const adapter = new EmailAdapter()
+            await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+            }, {
+                skip_unsubscribe: 1,
+                track_links: 0,
+            })
+
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.message.skip_unsubscribe).toBe(1)
+            expect(body.message.track_links).toBe(0)
+        })
+
+        it('checkIsAvailable uses email-validation endpoint', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, { status: 'success', result: 'valid' }))
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.checkIsAvailable()).resolves.toBe(true)
+
+            expect(fetch).toHaveBeenCalledWith(
+                `${UNISENDER_GO_CONFIG.api_url}/email-validation/single.json`,
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({
+                        'X-API-KEY': UNISENDER_GO_CONFIG.token,
+                    }),
+                }),
+            )
+            expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ email: 'noreply@example.com' })
+        })
+
+        it('checkIsAvailable returns false when validation API fails', async () => {
+            fetch.mockResolvedValue(createJsonResponse(401, { status: 'error', message: 'Unauthorized' }))
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.checkIsAvailable()).resolves.toBe(false)
+        })
+
+        it('downloads meta.attachments and sends them as base64 content', async () => {
+            mockHttpsGetWithStream({ content: ATTACHMENT_CONTENT })
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                status: 'success',
+                job_id: 'job-attach',
+                emails: ['user@example.com'],
+            }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })
+
+            expect(isOk).toBe(true)
+            expect(https.get).toHaveBeenCalledWith(ATTACHMENT_URL, expect.any(Function))
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.message.attachments).toEqual([{
+                type: 'text/plain',
+                name: 'doc.txt',
+                content: Buffer.from(ATTACHMENT_CONTENT).toString('base64'),
+            }])
+        })
+
+        it('accepts in-memory buffer attachments without downloading', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                status: 'success',
+                job_id: 'job-buffer',
+                emails: ['user@example.com'],
+            }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'With buffer',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        buffer: Buffer.from('csv-rows'),
+                        mimetype: 'text/csv',
+                        originalFilename: 'export.csv',
+                    }],
+                },
+            })
+
+            expect(isOk).toBe(true)
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.message.attachments).toEqual([{
+                type: 'text/csv',
+                name: 'export.csv',
+                content: Buffer.from('csv-rows').toString('base64'),
+            }])
+        })
+
+        it('fails send when attachment download returns status >= 400', async () => {
+            mockHttpsGetWithStream({ statusCode: 503 })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                html: '<p>See file</p>',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })).rejects.toThrow('Failed to download attachment: 503')
+        })
+
+        it('fails send when attachment download request errors', async () => {
+            mockHttpsGetWithStream({ error: new Error('ECONNRESET') })
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                html: '<p>See file</p>',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })).rejects.toThrow('ECONNRESET')
+        })
+    })
+
+    describe('Sendsay adapter', () => {
+        beforeEach(() => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify(SENDSAY_CONFIG)
+        })
+
+        it('marks adapter as configured when EMAIL_API_CONFIG type is sendsay', () => {
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(true)
+            expect(adapter.provider).toBe(EMAIL_ADAPTER_TYPE_SENDSAY)
+        })
+
+        it('marks adapter as not configured when sendsay auth fields are missing', () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                type: EMAIL_ADAPTER_TYPE_SENDSAY,
+                api_url: SENDSAY_CONFIG.api_url,
+                from: SENDSAY_CONFIG.from,
+            })
+
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(false)
+        })
+
+        it('maps notification messageType to top-level Sendsay label instead of letter.label', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, {
+                session: 'abc',
+                'track.id': 12345,
+            }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                emailFrom: 'Support <support@example.com>',
+                subject: 'Hello from Sendsay',
+                text: 'Plain text',
+                html: '<b>HTML</b>',
+                // Notification transport passes message.type through messageType for provider tagging.
+                messageType: 'SHARE_TICKET',
+                meta: { attachingData: { organizationId: 'org-1' } },
+            })
+
+            expect(isOk).toBe(true)
+            expect(context['track.id']).toBe(12345)
+
+            const [calledUrl, calledOpts] = fetch.mock.calls[0]
+            expect(calledUrl).toBe(`${SENDSAY_CONFIG.api_url}/${SENDSAY_CONFIG.login}`)
+            expect(calledOpts.method).toBe('POST')
+            expect(calledOpts.headers).toEqual({
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            })
+
+            const body = JSON.parse(calledOpts.body)
+            expect(body).toMatchObject({
+                action: 'issue.send',
+                group: 'personal',
+                sendwhen: 'now',
+                email: 'user@example.com',
+                label: ['SHARE_TICKET'],
+                one_time_auth: {
+                    login: SENDSAY_CONFIG.login,
+                    sublogin: SENDSAY_CONFIG.sublogin,
+                    passwd: SENDSAY_CONFIG.passwd,
+                },
+                letter: {
+                    subject: 'Hello from Sendsay',
+                    'from.email': 'noreply@example.com',
+                    'from.name': 'Condo',
+                    'reply.email': 'support@example.com',
+                    'reply.name': 'Support',
+                    'customer.id': JSON.stringify({ organizationId: 'org-1' }),
+                    message: {
+                        html: '<b>HTML</b>',
+                        text: 'Plain text',
+                    },
+                },
+            })
+            // Sendsay expects issue labels at the top level of issue.send, not inside letter payload.
+            expect(body.letter.label).toBeUndefined()
+            expect(body['users.list']).toBeUndefined()
+            expect(body.login).toBeUndefined()
+            expect(body.passwd).toBeUndefined()
+        })
+
+        it('uses apikey auth when token is provided', async () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                ...SENDSAY_CONFIG,
+                token: 'sendsay-api-key',
+                passwd: undefined,
+            })
+            fetch.mockResolvedValue(createJsonResponse(200, { 'track.id': 99 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.apikey).toBe('sendsay-api-key')
+            expect(body.one_time_auth).toBeUndefined()
+        })
+
+        it('downloads attachments and maps them to letter.attaches', async () => {
+            mockHttpsGetWithStream({ content: ATTACHMENT_CONTENT })
+            fetch.mockResolvedValue(createJsonResponse(200, { 'track.id': 7 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk] = await adapter.send({
+                to: 'user@example.com',
+                subject: 'With attachment',
+                text: 'See file',
+                meta: {
+                    attachments: [{
+                        publicUrl: ATTACHMENT_URL,
+                        mimetype: 'text/plain',
+                        originalFilename: 'doc.txt',
+                    }],
+                },
+            })
+
+            expect(isOk).toBe(true)
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.letter.attaches).toEqual([{
+                name: 'doc.txt',
+                content: Buffer.from(ATTACHMENT_CONTENT).toString('base64'),
+                encoding: 'base64',
+                'mime-type': 'text/plain',
+            }])
+        })
+
+        it('checkIsAvailable uses authenticated sys.settings.get', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, { list: { 'about.id': 123 } }))
+
+            const adapter = new EmailAdapter()
+            await expect(adapter.checkIsAvailable()).resolves.toBe(true)
+
+            expect(fetch.mock.calls[0][0]).toBe(`${SENDSAY_CONFIG.api_url}/${SENDSAY_CONFIG.login}`)
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body).toEqual({
+                action: 'sys.settings.get',
+                list: ['about.id'],
+                one_time_auth: {
+                    login: SENDSAY_CONFIG.login,
+                    sublogin: SENDSAY_CONFIG.sublogin,
+                    passwd: SENDSAY_CONFIG.passwd,
+                },
+            })
+        })
+
+        it('does not duplicate login when api_url already includes account path', async () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify({
+                ...SENDSAY_CONFIG,
+                api_url: `${SENDSAY_CONFIG.api_url}/${SENDSAY_CONFIG.login}`,
+            })
+            fetch.mockResolvedValue(createJsonResponse(200, { 'track.id': 1 }))
+
+            const adapter = new EmailAdapter()
+            await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(fetch.mock.calls[0][0]).toBe(`${SENDSAY_CONFIG.api_url}/${SENDSAY_CONFIG.login}`)
+        })
+
+        it('sends notification copies as separate personal emails because Sendsay has no visible Cc/Bcc headers', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 55 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 56 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 57 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 58 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                cc: 'Copy <copy@example.com>, other@example.com',
+                bcc: 'hidden@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context['track.id']).toBe(55)
+            expect(context.recipients).toEqual([
+                { email: 'user@example.com', isOk: true, context: { 'track.id': 55 } },
+                { email: 'copy@example.com', isOk: true, context: { 'track.id': 56 } },
+                { email: 'other@example.com', isOk: true, context: { 'track.id': 57 } },
+            ])
+            expect(context.bcc).toEqual([{
+                email: 'hidden@example.com',
+                isOk: true,
+                context: { 'track.id': 58 },
+            }])
+            expect(context.partial).toBeUndefined()
+
+            expect(fetch).toHaveBeenCalledTimes(4)
+
+            const emails = fetch.mock.calls.map(([, opts]) => JSON.parse(opts.body).email)
+            expect(emails).toEqual([
+                'user@example.com',
+                'copy@example.com',
+                'other@example.com',
+                'hidden@example.com',
+            ])
+            fetch.mock.calls.forEach(([, opts]) => {
+                const body = JSON.parse(opts.body)
+                expect(body['users.list']).toBeUndefined()
+                expect(body.letter.cc).toBeUndefined()
+            })
+        })
+
+        it('keeps top-level track.id for application flows that send one main email plus HIDDEN_COPY bcc', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 11, session: 's1' }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 12 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                bcc: 'hidden@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context['track.id']).toBe(11)
+            expect(context.session).toBe('s1')
+            expect(context.recipients).toEqual([
+                { email: 'user@example.com', isOk: true, context: { 'track.id': 11, session: 's1' } },
+            ])
+            expect(context.bcc).toEqual([{
+                email: 'hidden@example.com',
+                isOk: true,
+                context: { 'track.id': 12 },
+            }])
+        })
+
+        it('continues remaining primary and bcc sends after one recipient fails', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 1 }))
+                .mockResolvedValueOnce(createJsonResponse(400, { errors: [{ id: 'wrong_email' }] }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 2 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 3 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                cc: 'bad@example.com, later@example.com',
+                bcc: 'hidden@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context['track.id']).toBe(1)
+            expect(context.partial).toBe(true)
+            expect(context.recipients).toEqual([
+                { email: 'user@example.com', isOk: true, context: { 'track.id': 1 } },
+                {
+                    email: 'bad@example.com',
+                    isOk: false,
+                    context: expect.objectContaining({ errors: [{ id: 'wrong_email' }] }),
+                },
+                { email: 'later@example.com', isOk: true, context: { 'track.id': 2 } },
+            ])
+            expect(context.bcc).toEqual([{
+                email: 'hidden@example.com',
+                isOk: true,
+                context: { 'track.id': 3 },
+            }])
+            expect(fetch).toHaveBeenCalledTimes(4)
+            expect(fetch.mock.calls.map(([, opts]) => JSON.parse(opts.body).email)).toEqual([
+                'user@example.com',
+                'bad@example.com',
+                'later@example.com',
+                'hidden@example.com',
+            ])
+        })
+
+        it('marks partial delivery when audit-copy bcc fails after the user-facing email was sent', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 54 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 55 }))
+                .mockRejectedValueOnce(new Error('ECONNRESET'))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 56 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'user@example.com',
+                cc: 'copy@example.com, user@example.com',
+                bcc: 'hidden1@example.com, hidden2@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context['track.id']).toBe(54)
+            expect(context.partial).toBe(true)
+            expect(context.recipients).toEqual([
+                { email: 'user@example.com', isOk: true, context: { 'track.id': 54 } },
+                { email: 'copy@example.com', isOk: true, context: { 'track.id': 55 } },
+            ])
+            expect(context.bcc).toEqual([{
+                email: 'hidden1@example.com',
+                isOk: false,
+                context: { error: 'ECONNRESET' },
+            }, {
+                email: 'hidden2@example.com',
+                isOk: true,
+                context: { 'track.id': 56 },
+            }])
+            expect(fetch).toHaveBeenCalledTimes(4)
+        })
+
+        it('marks partial when every primary fails but a bcc audit copy succeeds', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(400, { errors: [{ id: 'wrong_email' }] }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 77 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'bad@example.com',
+                bcc: 'hidden@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context.partial).toBe(true)
+            expect(context.recipients).toEqual([{
+                email: 'bad@example.com',
+                isOk: false,
+                context: expect.objectContaining({ errors: [{ id: 'wrong_email' }] }),
+            }])
+            expect(context.bcc).toEqual([{
+                email: 'hidden@example.com',
+                isOk: true,
+                context: { 'track.id': 77 },
+            }])
+        })
+
+        it('returns isOk true when to fails but a cc copy is delivered', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(400, { errors: [{ id: 'wrong_email' }] }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 88 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'bad@example.com',
+                cc: 'copy@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context.partial).toBe(true)
+            expect(context.recipients).toEqual([
+                {
+                    email: 'bad@example.com',
+                    isOk: false,
+                    context: expect.objectContaining({ errors: [{ id: 'wrong_email' }] }),
+                },
+                {
+                    email: 'copy@example.com',
+                    isOk: true,
+                    context: { 'track.id': 88 },
+                },
+            ])
+            expect(context.bcc).toBeUndefined()
+        })
+
+        it('returns isOk false only when every Sendsay recipient fails', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(400, { errors: [{ id: 'wrong_email' }] }))
+                .mockResolvedValueOnce(createJsonResponse(400, { errors: [{ id: 'wrong_email' }] }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'bad1@example.com',
+                cc: 'bad2@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(false)
+            expect(context.partial).toBeUndefined()
+            expect(context.recipients).toEqual([
+                {
+                    email: 'bad1@example.com',
+                    isOk: false,
+                    context: expect.objectContaining({ errors: [{ id: 'wrong_email' }] }),
+                },
+                {
+                    email: 'bad2@example.com',
+                    isOk: false,
+                    context: expect.objectContaining({ errors: [{ id: 'wrong_email' }] }),
+                },
+            ])
+        })
+
+        it('continues remaining recipients when response-body processing throws for one address', async () => {
+            fetch
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    text: jest.fn().mockRejectedValue(new Error('body read failed')),
+                })
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 2 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'broken@example.com',
+                cc: 'later@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(context.partial).toBe(true)
+            expect(context.recipients).toEqual([
+                {
+                    email: 'broken@example.com',
+                    isOk: false,
+                    context: { error: 'body read failed' },
+                },
+                {
+                    email: 'later@example.com',
+                    isOk: true,
+                    context: { 'track.id': 2 },
+                },
+            ])
+            expect(fetch).toHaveBeenCalledTimes(2)
+        })
+
+        it('deduplicates recipients case-insensitively across to, cc, and bcc audit copies', async () => {
+            fetch
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 1 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 2 }))
+                .mockResolvedValueOnce(createJsonResponse(200, { 'track.id': 3 }))
+
+            const adapter = new EmailAdapter()
+            const [isOk, context] = await adapter.send({
+                to: 'User@Example.com',
+                cc: 'user@example.com, Copy@Example.com',
+                bcc: 'user@example.com, COPY@example.com, unique-bcc@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            })
+
+            expect(isOk).toBe(true)
+            expect(fetch).toHaveBeenCalledTimes(3)
+            const emails = fetch.mock.calls.map(([, opts]) => JSON.parse(opts.body).email)
+            expect(emails).toEqual([
+                'User@Example.com',
+                'Copy@Example.com',
+                'unique-bcc@example.com',
+            ])
+            expect(context.recipients).toEqual([
+                { email: 'User@Example.com', isOk: true, context: { 'track.id': 1 } },
+                { email: 'Copy@Example.com', isOk: true, context: { 'track.id': 2 } },
+            ])
+            expect(context.bcc).toEqual([{
+                email: 'unique-bcc@example.com',
+                isOk: true,
+                context: { 'track.id': 3 },
+            }])
+        })
+
+        it('keeps application-controlled recipient and letter fields even when extendedParams adds extra Sendsay options', async () => {
+            fetch.mockResolvedValue(createJsonResponse(200, { 'track.id': 9 }))
+
+            const adapter = new EmailAdapter()
+            await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Body',
+            }, {
+                email: 'attacker@example.com',
+                letter: { subject: 'hijacked' },
+                action: 'member.list',
+                group: 'masssending',
+                extra: { keep: true },
+            })
+
+            const body = JSON.parse(fetch.mock.calls[0][1].body)
+            expect(body.email).toBe('user@example.com')
+            expect(body.action).toBe('issue.send')
+            expect(body.group).toBe('personal')
+            expect(body.letter.subject).toBe('Hello')
+            expect(body.extra).toEqual({ keep: true })
+        })
+    })
+
+    describe('EmailAdapter facade', () => {
+        it('throws for unknown type from EMAIL_ADAPTERS registry', () => {
+            expect(() => new EmailAdapter({
+                type: 'unknown',
+                api_url: 'https://example.com',
+                token: 'token',
+                from: 'noreply@example.com',
+            })).toThrow('Unknown email adapter: unknown')
+        })
+
+        it('rejects empty required fields via zod config validation', () => {
+            const adapter = new EmailAdapter({
+                api_url: '',
+                token: 'token',
+                from: 'noreply@example.com',
+            })
+            expect(adapter.isConfigured).toBe(false)
+        })
+
+        it('keeps undeclared config fields after zod validation', async () => {
+            fetch.mockResolvedValue({
+                ok: true,
+                status: 200,
+                json: jest.fn().mockResolvedValue({ id: 'ok' }),
+                text: jest.fn().mockResolvedValue('{"id":"ok"}'),
+            })
+
+            const adapter = new EmailAdapter({
+                ...MAILGUN_CONFIG,
+                customProviderOption: 'keep-me',
+            })
+            expect(adapter.isConfigured).toBe(true)
+
+            await adapter.send({
+                to: 'user@example.com',
+                subject: 'Hello',
+                text: 'Plain text',
+            })
+
+            // Adapter still works; undeclared keys must not fail validation
+            expect(fetch).toHaveBeenCalled()
+        })
+
+        it('throws no EMAIL_API_CONFIG when env is missing', async () => {
+            delete process.env.EMAIL_API_CONFIG
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(false)
+            await expect(adapter.send({
+                to: 'user@example.com',
+                subject: 'Hi',
+                text: 'body',
+            })).rejects.toThrow('no EMAIL_API_CONFIG')
+        })
+
+        it('defaults to mailgun when type field is omitted', () => {
+            process.env.EMAIL_API_CONFIG = JSON.stringify(MAILGUN_CONFIG)
+
+            const adapter = new EmailAdapter()
+            expect(adapter.isConfigured).toBe(true)
+            expect(adapter.provider).toBe(EMAIL_ADAPTER_TYPE_MAILGUN)
+        })
+    })
+})

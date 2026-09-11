@@ -1,0 +1,14 @@
+{
+  "index": {
+    "title": "Документация",
+    "hidden": true
+  },
+  "ui": "Condo UI",
+  "bridge": "Condo Bridge",
+  "api": "Condo API",
+  "accruals-hub": "Хаб начислений",
+  "g-doc-link": {
+    "title": "Старая документация",
+    "href": "https://docs.google.com/document/d/1zAvzY6B2_aWN1jXqZLhlXbZmTIS72YKZ/edit?usp=sharing"
+  }
+}

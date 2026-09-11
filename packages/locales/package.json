@@ -1,0 +1,13 @@
+{
+  "name": "@open-condo/locales",
+  "version": "1.0.0",
+  "dependencies": {
+    "@open-condo/config": "workspace:^",
+    "lodash": "catalog:",
+    "next-cookies": "^2.0.3"
+  },
+  "exports": {
+    "./*": "./*.js"
+  },
+  "repository": "https://github.com/open-condo-software/condo/tree/main/packages/locales"
+}

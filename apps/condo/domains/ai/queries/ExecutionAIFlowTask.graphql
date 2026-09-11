@@ -1,0 +1,38 @@
+query getExecutionAIFlowTaskById ($id: ID!) {
+    task: allExecutionAIFlowTasks(
+        where: { id: $id }
+        first: 1
+    ) {
+        id
+        result
+        errorMessage
+        status
+        aiSessionId
+        __typename
+    }
+}
+
+mutation createExecutionAIFlowTask ($data: ExecutionAIFlowTaskCreateInput!) {
+    task: createExecutionAIFlowTask(
+        data: $data
+    ) {
+        id
+        result
+        errorMessage
+        status
+        aiSessionId
+    }
+}
+
+mutation updateExecutionAIFlowTask ($id: ID!, $data: ExecutionAIFlowTaskUpdateInput!) {
+    task: updateExecutionAIFlowTask(
+        id: $id
+        data: $data
+    ) {
+        id
+        result
+        errorMessage
+        status
+        aiSessionId
+    }
+}

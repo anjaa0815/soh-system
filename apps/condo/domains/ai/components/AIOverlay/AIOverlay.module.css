@@ -1,0 +1,87 @@
+.ai-drawer {
+  --ai-chat-header-height:
+    calc(
+      var(--condo-global-spacing-24)
+      + var(--condo-global-spacing-12)
+      + var(--condo-global-spacing-48)
+    );
+
+  /* Keep equal to .messages-container gap so previous-turn chips pin under the header. */
+  --ai-chat-chrome-gap: var(--condo-global-spacing-12);
+
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--condo-global-color-gray-1);
+}
+
+.header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--ai-chat-header-height);
+  padding: var(--condo-global-spacing-24) var(--condo-global-spacing-24) var(--condo-global-spacing-12);
+  background: color-mix(in srgb, var(--condo-global-color-gray-1) 88%, transparent);
+  backdrop-filter: blur(20px);
+}
+
+.left-section {
+  display: flex;
+  align-items: center;
+}
+
+.right-section {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+
+/* Resize handle */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4px;
+  height: 100%;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.resize-handle:hover {
+  background: var(--condo-global-color-green-5);
+  border-left: 2px solid var(--condo-global-color-green-5);
+}
+
+.resize-handle:active {
+  background: var(--condo-global-color-green-5);
+  border-left: 2px solid var(--condo-global-color-green-5);
+}
+
+.resize-handle.at-min-width {
+  cursor: w-resize;
+}
+
+.resize-handle.at-max-width {
+  cursor: e-resize;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}

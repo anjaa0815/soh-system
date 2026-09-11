@@ -1,0 +1,59 @@
+fragment B2CAppPermissions on B2CApp {
+    developmentFullscreenAllowed
+    productionFullscreenAllowed
+    developmentMicrophoneAllowed
+    productionMicrophoneAllowed
+    developmentCameraAllowed
+    productionCameraAllowed
+    developmentSpeakerSelectionAllowed
+    productionSpeakerSelectionAllowed
+    developmentClipboardWriteAllowed
+    productionClipboardWriteAllowed
+    developmentPushNotificationsAllowed
+    productionPushNotificationsAllowed
+    developmentVoipNotificationsAllowed
+    productionVoipNotificationsAllowed
+    developmentBleBeaconBgAllowed
+    productionBleBeaconBgAllowed
+    developmentBleCentralBgAllowed
+    productionBleCentralBgAllowed
+    developmentBlePeripheralBgAllowed
+    productionBlePeripheralBgAllowed
+}
+
+fragment B2CAppEntryPoints on B2CApp {
+    developmentAppUrl
+    productionAppUrl
+}
+
+query getB2CApp($id: ID!) {
+    app: B2CApp(where: { id: $id }) {
+        id
+        name
+        type
+        developer
+        logo {
+            publicUrl
+        }
+        developmentWebTransformEnabled
+        productionWebTransformEnabled
+        ...B2CAppEntryPoints
+        ...B2CAppPermissions
+        developmentExportId
+        productionExportId
+    }
+}
+
+mutation createB2CApp($data: B2CAppCreateInput!) {
+    app: createB2CApp(data: $data) {
+        id
+        name
+        __typename
+    }
+}
+
+mutation updateB2CApp($id: ID!, $data: B2CAppUpdateInput!) {
+    app: updateB2CApp(id: $id, data: $data) {
+        id
+    }
+}

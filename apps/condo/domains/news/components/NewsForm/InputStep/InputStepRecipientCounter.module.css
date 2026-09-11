@@ -1,0 +1,13 @@
+.recipient-counter > div {
+  max-width: 500px;
+  margin-left: auto;
+}
+
+.custom-counter-content {
+  justify-content: space-around;
+  width: 100%;
+}
+
+.custom-counter {
+  width: 100%;
+}

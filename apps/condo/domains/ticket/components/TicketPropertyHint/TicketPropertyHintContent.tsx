@@ -1,0 +1,52 @@
+import { Col, Row, RowProps } from 'antd'
+import classNames from 'classnames'
+import React from 'react'
+
+import { useIntl } from '@open-condo/next/intl'
+import { Markdown, Typography } from '@open-condo/ui'
+
+import styles from './TicketPropertyHintContent.module.css'
+
+type TicketPropertyHintContentProps = {
+    content: string
+    className?: string
+    linkToHint?: string
+}
+
+const CONTENT_GUTTER: RowProps['gutter'] = [0, 14]
+
+export const TicketPropertyHintContent = (props: TicketPropertyHintContentProps) => {
+    const intl = useIntl()
+    const ExtraTitleMessage = intl.formatMessage({ id: 'component.statscard.ExtraTitle' })
+
+    const ref = React.createRef<HTMLDivElement>()
+    const [isContentOverflow, setIsContentOverflow] = React.useState(false)
+
+    React.useLayoutEffect(() => {
+        if (ref.current) {
+            setIsContentOverflow(ref.current.clientHeight + 10 < ref.current.scrollHeight)
+        }
+    }, [ref])
+
+    return (
+        <Row gutter={CONTENT_GUTTER}>
+            <Col span={24}>
+                <div
+                    ref={ref}
+                    className={classNames(styles.contentWrapper, props.className)}
+                >
+                    <Markdown type='inline'>{props.content}</Markdown>
+                </div>
+            </Col>
+            {
+                isContentOverflow && props.linkToHint && (
+                    <Col span={24}>
+                        <Typography.Link href={props.linkToHint} size='large' target='_blank' rel='noreferrer'>
+                            {ExtraTitleMessage}
+                        </Typography.Link>
+                    </Col>
+                )
+            }
+        </Row>
+    )
+}

@@ -1,0 +1,76 @@
+`GET /api/check`
+
+Returns a list of accruals by organization TIN and personal account. The response is always an array if accruals are found, otherwise a 404 error is returned..
+
+## 🔐Authentication
+
+[View authentication documentation →](/docs/accruals-hub/auth)
+
+## Query parameters
+
+| Parameter | Type/Format                   | Required | Description             | Example         |
+|-----------|-------------------------------|----------|-------------------------|-----------------|
+| tin       | string\<10 to 12 characters\> | ✅        | Organization TIN        | `7712345678`    |
+| account   | string\<1 to 100 characters\> | ✅        | Personal account number | `ЛС-1234567890` |
+
+## Request example
+
+```
+GET /api/check?tin=9731062087&account=ЛС-1234567890
+```
+
+## Response
+
+| Parameter      | Type/Format          | Required | Description                                     | Example                                                        |
+|----------------|----------------------|----------|-------------------------------------------------|----------------------------------------------------------------|
+| id             | string\<uuid\>       | ✅        | Unique accrual identifier                       | `75b12bb4-a87b-4c5d-8e4d-900802c67ed3`                         |
+| category       | string               | ✅        | Accrual category                                | `Квартплата`, `Электроэнергия`                                 |
+| account        | string               | ✅        | Payer's personal account                        | `ЛС-1234567890`                                                |
+| toPay          | string               | ✅        | Amount to pay                                   | `15620.50`                                                     |
+| period         | string\<YYYY-MM-01\> | ✅        | Accrual period                                  | `2025-08-01`                                                   |
+| address        | string               | ✅        | Property address                                | `г Москва, ул Тверская, д 15`                           |
+| addressKey     | string\<uuid\>       | ✅        | The unique Address ID                 | `0c5b2444-70a0-4932-980c-b4dc0d3f02b5`                         |
+| unitType       | string               | ❌        | Unit type                                       | `flat`, `parking`, `commercial`                                |
+| unitName       | string               | ❌        | Unit number/name                                | `42`, `123А`                                                   |
+| organization   | string               | ✅        | Recipient organization name                     | `ООО УК "Столичный дом"`                                       |
+| tin            | string               | ✅        | Organization TIN                                | `7712345678`                                                   |
+| iec            | string               | ❌        | Organization IEC (Tax Registration Reason Code) | `770101001`                                                    |
+| routingNumber  | string               | ✅        | Recipient bank BIC (Bank Identification Code)   | `044525555`                                                    |
+| bankAccount    | string               | ✅        | Organization bank account                       | `40702810500000001234`                                         |
+| receiptFileUrl | string               | ❌        | Link to the receipt                             | `https://example.com/receipt.pdf`                              |
+| purpose        | string               | ✅        | Payment purpose for bank transfer               | `Квартплата за август 2025 г. по лицевому счету ЛС-1234567890` |
+
+## Response example
+
+```json
+{   
+    "data": [
+        {
+            "id": "c7f3a892-e5b1-4d6c-8a9f-1234567890ab",
+            "category": "Квартплата",
+            "account": "ЛС-7845123690",
+            "toPay": "15620.50",
+            "period": "2025-08-01",
+            "address": "г Москва, ул Тверская, д 15",
+            "addressKey": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5",
+            "unitType": "flat",
+            "unitName": "42",
+            "organization": "ООО УК \"Столичный дом\"",
+            "tin": "7712345678",
+            "iec": "770101001",
+            "routingNumber": "044525555",
+            "bankAccount": "40702810500000001234",
+            "receiptFileUrl": "https://teststorage.com/receipts/august-2025.pdf",
+            "purpose": "Оплата жилищно-коммунальных услуг за август 2025"
+        },
+    ]
+}
+```
+
+## Error Codes
+
+| Код ошибки              | HTTP статус | Сообщение                   | Причина                            | Решение                            |
+|-------------------------|-------------|-----------------------------|------------------------------------|------------------------------------|
+| `VALIDATION_FAILED`     | 400         | Invalid format of input     | Parameter validation error         | Check the parameter format         |
+| `ACCOUNT_NOT_FOUND`     | 404         | Account number is not found | Accrual for this account not found | Verify the account number          |
+| `INTERNAL_SERVER_ERROR` | 500         | Internal server error       | 	Internal server error             | Try again later or contact support |

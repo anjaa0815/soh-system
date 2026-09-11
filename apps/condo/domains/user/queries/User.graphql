@@ -1,0 +1,36 @@
+query authenticatedUser {
+    authenticatedUser {
+        id
+        name
+        avatar {
+            publicUrl
+        }
+        phone
+        email
+        isAdmin
+        isSupport
+        rightsSet {
+            id
+        }
+        type
+        locale
+        showGlobalHints
+        hasMarketingConsent
+        isEmailVerified
+        isPhoneVerified
+        isTwoFactorAuthenticationEnabled
+    }
+}
+
+mutation signOut {
+    unauthenticateUser {
+        success
+    }
+}
+
+mutation updateUser ($id: ID!, $data: UserUpdateInput!) {
+    user: updateUser (id: $id, data: $data) {
+        id
+    }
+}
+

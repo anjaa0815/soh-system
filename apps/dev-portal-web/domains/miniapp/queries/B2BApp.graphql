@@ -1,0 +1,53 @@
+fragment B2BAppPermissions on B2BApp {
+    developmentFullscreenAllowed
+    productionFullscreenAllowed
+    developmentMicrophoneAllowed
+    productionMicrophoneAllowed
+    developmentCameraAllowed
+    productionCameraAllowed
+    developmentSpeakerSelectionAllowed
+    productionSpeakerSelectionAllowed
+    developmentClipboardWriteAllowed
+    productionClipboardWriteAllowed
+}
+
+fragment B2BAppEntryPoints on B2BApp {
+    developmentAppUrl
+    productionAppUrl
+}
+
+fragment B2BAppFragment on B2BApp {
+    __typename
+    id
+    name
+    developer
+    developerUrl
+    category
+    shortDescription
+    detailedDescription
+    logo {
+        publicUrl
+    }
+    developmentExportId
+    productionExportId
+    ...B2BAppEntryPoints
+    ...B2BAppPermissions
+}
+
+query getB2BApp($id: ID!) {
+    app: B2BApp(where: { id: $id }) {
+        ...B2BAppFragment
+    }
+}
+
+mutation createB2BApp($data: B2BAppCreateInput!) {
+    app: createB2BApp(data: $data) {
+        ...B2BAppFragment
+    }
+}
+
+mutation updateB2BApp($id: ID!, $data: B2BAppUpdateInput!) {
+    app: updateB2BApp(id: $id, data: $data) {
+        ...B2BAppFragment
+    }
+}

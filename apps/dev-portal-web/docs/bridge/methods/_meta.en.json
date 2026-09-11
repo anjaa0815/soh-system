@@ -1,0 +1,13 @@
+{
+  "get-launch-params": "CondoWebAppGetLaunchParams",
+  "request-auth": "CondoWebAppRequestAuth",
+  "request-payment": "CondoWebAppRequestPayment",
+  "get-fragment": "CondoWebAppGetFragment",
+  "resize-window": "CondoWebAppResizeWindow",
+  "redirect": "CondoWebAppRedirect",
+  "close-application": "CondoWebAppCloseApplication",
+  "set-page-actions": "CondoWebAppSetPageActions",
+  "notifications": "Notifications",
+  "modals": "Modals",
+  "history": "History and navigation"
+}

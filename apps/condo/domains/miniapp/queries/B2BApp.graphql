@@ -1,0 +1,70 @@
+fragment B2BAppPermissions on B2BApp {
+    isMicrophoneAllowed
+    isCameraAllowed
+    isSpeakerSelectionAllowed
+    isFullscreenAllowed
+    isClipboardWriteAllowed
+}
+
+fragment B2BAppInfo on B2BApp {
+    id
+    name
+    appUrl
+    domains {
+        mapping {
+            from
+            to
+        }
+    }
+    ...B2BAppPermissions
+}
+
+query getGlobalB2BApps {
+    b2bApps: allB2BApps (
+        where: {
+            isGlobal: true,
+            isHidden: false,
+        },
+        first: 100,
+    ) {
+        ...B2BAppInfo
+        features
+    }
+}
+
+query getCountB2BAppsWithNewsSharingConfig {
+    _allB2BAppsMeta (where: {
+        isHidden: false,
+        isPublic: true,
+        newsSharingConfig_is_null: false,
+        deletedAt: null,
+    }) {
+        count
+    }
+}
+
+query getB2BApp($id: ID!) {
+    b2bApp: allB2BApps(where: { id: $id }, first: 1) {
+        ...B2BAppInfo
+    }
+}
+
+query getB2BAppsByIds($ids: [ID!]!) {
+    b2bApps: allB2BApps(where: { id_in: $ids }, first: 100) {
+        ...B2BAppInfo
+    }
+}
+
+query getPublicB2BAppsByIds($ids: [ID!]!) {
+    b2bApps: allB2BApps(where: { id_in: $ids, isPublic: true, isHidden: false, deletedAt: null }, first: 100) {
+        ...B2BAppInfo
+    }
+}
+
+query getB2BAppsWithBillingTabEmbeddingConfig {
+    b2bApps: allB2BApps(where: { billingEmbeddingConfig: { tabUrl_not: null } }, first: 100) {
+        ...B2BAppInfo
+        shortDescription
+        billingEmbeddingConfig { tabUrl }
+    }
+}

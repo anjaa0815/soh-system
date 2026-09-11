@@ -1,0 +1,259 @@
+import React, { useCallback, useRef, useState } from 'react'
+
+import { Check, Copy, Download } from '@open-condo/icons'
+import { useIntl } from '@open-condo/next/intl'
+import { Button, Dropdown, Markdown, Tag, Tooltip, Typography } from '@open-condo/ui'
+import { colors } from '@open-condo/ui/colors'
+
+import { AIChatDocument } from '@condo/domains/ai/components/AIChatFile'
+import { exportAIMessage, type ExportAIMessageFormat, type ExportAIMessageOptions } from '@condo/domains/ai/utils/exportAIMessage'
+import { stripMarkdown } from '@condo/domains/common/utils/stripMarkdown'
+
+
+import styles from './AIChatMessage.module.css'
+import { AIChatSuggestions } from './AIChatSuggestions'
+import { AIChatThinkingStatus } from './AIChatThinkingStatus'
+import { A2UISurfaces } from './genUI'
+
+import type { Message } from '@condo/domains/ai/utils/aiChatStorage'
+
+const COPY_RESET_TIMEOUT_MS = 2000
+const EXPORT_MENU_FORMATS: ExportAIMessageFormat[] = ['docx', 'pdf', 'txt']
+const SUGGESTION_ANIMATION_DELAY_MS = 70
+
+export type AIChatMessageProps = {
+    message: Message
+    onSuggestionClick?: (suggestion: string) => void
+    canExecuteAIFlow?: boolean
+}
+
+const useCopyButton = (message: Message) => {
+    const intl = useIntl()
+    const [copied, setCopied] = useState(false)
+
+    const copyLabel = intl.formatMessage({ id: 'Copy' })
+    const copiedLabel = intl.formatMessage({ id: 'Copied' })
+
+    const handleCopy = useCallback(async () => {
+        if (copied) return
+
+        const textToCopy = message.role === 'assistant'
+            ? stripMarkdown(message.content.text, { collapseLineBreaks: false })
+            : message.content.text
+
+        try {
+            await navigator.clipboard.writeText(textToCopy)
+            setCopied(true)
+
+            setTimeout(() => setCopied(false), COPY_RESET_TIMEOUT_MS)
+        } catch (e) {
+            console.error('Unable to copy to clipboard', e)
+        }
+    }, [copied, message.content.text, message.role])
+
+    const copyButton = (
+        <Tooltip title={copied ? copiedLabel : copyLabel}>
+            <Button
+                type='secondary'
+                compact
+                minimal
+                size='medium'
+                icon={copied ? <Check size='small' /> : <Copy size='small' />}
+                onClick={handleCopy}
+                disabled={copied}
+                aria-label={copied ? copiedLabel : copyLabel}
+            />
+        </Tooltip>
+    )
+
+    return copyButton
+}
+
+const AIChatUserMessage: React.FC<{ message: Message }> = ({ message }) => {
+    const copyButton = useCopyButton(message)
+
+    return (
+        <div
+            data-message-id={message.id}
+            className={`${styles.messageWrapper} ${styles.userMessage}`}
+        >
+            <div className={styles.userMessageContainer}>
+                <div className={styles.userMessageRow}>
+                    {message.copyable === true && message.content.text?.trim() && (
+                        <div className={styles.userMessageActions}>{copyButton}</div>
+                    )}
+                    {(message.content.text?.trim() || message.content.attachments?.length) ? (
+                        <div className={styles.userMessageBubble}>
+                            {message.content.skillNames?.length ? (
+                                <div className={styles.userMessageSkillTag}>
+                                    {message.content.skillNames.map(skillName => (
+                                        <Tag
+                                            key={skillName}
+                                            textColor={colors.purple['7']}
+                                            bgColor={colors.purple['1']}
+                                        >
+                                            {skillName}
+                                        </Tag>
+                                    ))}
+                                </div>
+                            ) : null}
+                            {message.content.text?.trim() ? (
+                                <Typography.Text>{message.content.text}</Typography.Text>
+                            ) : null}
+                            {message.content.attachments?.length ? (
+                                <div className={styles.userMessageAttachments}>
+                                    {message.content.attachments.map((attachment, index) => (
+                                        <AIChatDocument
+                                            key={`${attachment.name}-${index}`}
+                                            name={attachment.name}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+type AIChatAssistantMessageProps = {
+    message: Message
+    onSuggestionClick?: (suggestion: string) => void
+    canExecuteAIFlow: boolean
+}
+
+const AIChatAssistantMessage: React.FC<AIChatAssistantMessageProps> = ({
+    message,
+    onSuggestionClick,
+    canExecuteAIFlow,
+}) => {
+    const intl = useIntl()
+    const assistantMarkdownRef = useRef<HTMLDivElement>(null)
+    const copyButton = useCopyButton(message)
+    const [exportLoadingByFormat, setExportLoadingByFormat] = useState<Record<ExportAIMessageFormat, boolean>>({
+        txt: false,
+        pdf: false,
+        docx: false,
+    })
+
+    const downloadLabel = intl.formatMessage({ id: 'Download' })
+    const exportMenuItems = EXPORT_MENU_FORMATS.map((format) => ({
+        key: format,
+        label: `${downloadLabel} ${format.toUpperCase()}`,
+    }))
+
+    const handleExport = useCallback(async (format: ExportAIMessageFormat) => {
+        if (exportLoadingByFormat[format]) return
+
+        setExportLoadingByFormat((prev) => ({ ...prev, [format]: true }))
+
+        try {
+            let payload: ExportAIMessageOptions
+            if (format === 'pdf') {
+                const el = assistantMarkdownRef.current
+                if (!el) {
+                    console.error('Unable to export PDF: markdown root is not mounted')
+                    return
+                }
+                payload = { format: 'pdf', pdfSourceElement: el }
+            } else {
+                payload = { format, text: message.content.text }
+            }
+            await exportAIMessage(payload)
+        } catch (e) {
+            console.error('Unable to export message', { format, error: e })
+        } finally {
+            setExportLoadingByFormat((prev) => ({ ...prev, [format]: false }))
+        }
+    }, [exportLoadingByFormat, message.content.text])
+
+    const isExporting = exportLoadingByFormat.txt || exportLoadingByFormat.pdf || exportLoadingByFormat.docx
+
+    const downloadButton = (
+        <Dropdown
+            trigger={['click']}
+            menu={{
+                items: exportMenuItems,
+                onClick: ({ key }) => void handleExport(key as ExportAIMessageFormat),
+            }}
+            disabled={isExporting}
+            placement='bottomLeft'
+        >
+            <Tooltip title={downloadLabel}>
+                <Button
+                    type='secondary'
+                    compact
+                    minimal
+                    size='medium'
+                    icon={<Download size='small' />}
+                    loading={isExporting}
+                    aria-label={downloadLabel}
+                />
+            </Tooltip>
+        </Dropdown>
+    )
+
+    return (
+        <div
+            data-message-id={message.id}
+            className={`${styles.messageWrapper} ${styles.assistantMessage}`}
+        >
+            <div className={styles.assistantMessageContainer}>
+                {message.status === 'sending' && !message.content.text?.trim() ? (
+                    <AIChatThinkingStatus />
+                ) : (
+                    <div
+                        ref={assistantMarkdownRef}
+                        className={styles.assistantMarkdown}
+                    >
+                        <Markdown type='inline'>{message.content.text}</Markdown>
+                    </div>
+                )}
+                {message.copyable === true && message.status !== 'sending' && (
+                    <div className={styles.assistantMessageActions}>
+                        {copyButton}
+                        {downloadButton}
+                    </div>
+                )}
+                {message.content.a2uiMessages?.length > 0 && (
+                    <div className={styles.assistantA2UI}>
+                        <A2UISurfaces
+                            messages={message.content.a2uiMessages}
+                        />
+                    </div>
+                )}
+                {message.content.suggestions?.length > 0 && (
+                    <AIChatSuggestions
+                        items={message.content.suggestions.map((suggestion, index) => ({
+                            key: `${message.id}-${index}-${suggestion}`,
+                            label: suggestion,
+                            disabled: !canExecuteAIFlow,
+                            animationDelayMs: index * SUGGESTION_ANIMATION_DELAY_MS,
+                            onClick: () => onSuggestionClick?.(suggestion),
+                        }))}
+                    />
+                )}
+            </div>
+        </div>
+    )
+}
+
+export const AIChatMessage: React.FC<AIChatMessageProps> = ({
+    message,
+    onSuggestionClick,
+    canExecuteAIFlow = true,
+}) => {
+    if (message.role === 'user') {
+        return <AIChatUserMessage message={message} />
+    }
+
+    return (
+        <AIChatAssistantMessage
+            message={message}
+            onSuggestionClick={onSuggestionClick}
+            canExecuteAIFlow={canExecuteAIFlow}
+        />
+    )
+}

@@ -1,0 +1,317 @@
+import {
+    useUpdateTicketMutation,
+    useGetEmployeesByOrganizationIdAndUserIdsQuery,
+    useGetTicketObserversByTicketIdQuery,
+    useGetTicketUpdatedAtLazyQuery,
+} from '@app/condo/gql'
+import { Form, notification } from 'antd'
+import get from 'lodash/get'
+import isEmpty from 'lodash/isEmpty'
+import isEqual from 'lodash/isEqual'
+import pick from 'lodash/pick'
+import reduce from 'lodash/reduce'
+import { useRouter } from 'next/router'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+
+import { useCachePersistor } from '@open-condo/apollo'
+import { useFeatureFlags } from '@open-condo/featureflags/FeatureFlagsContext'
+import { getClientSideSenderInfo } from '@open-condo/miniapp-utils/helpers/sender'
+import { useIntl } from '@open-condo/next/intl'
+import { ActionBar, Button, Typography } from '@open-condo/ui'
+
+import { Loader } from '@condo/domains/common/components/Loader'
+import { TICKET_OBSERVERS, AUTO_ASSIGN_ALL_TICKETS } from '@condo/domains/common/constants/featureflags'
+import { Invoice } from '@condo/domains/marketplace/utils/clientSchema'
+import { BaseTicketForm } from '@condo/domains/ticket/components/BaseTicketForm'
+import { TicketSubmitButton } from '@condo/domains/ticket/components/BaseTicketForm/TicketSubmitButton'
+import { useTicketFormContext } from '@condo/domains/ticket/components/TicketForm/TicketFormContext'
+import { REQUIRED_TICKET_FIELDS, AUTO_ASSIGN_SOURCE_TYPES } from '@condo/domains/ticket/constants/common'
+import { Ticket, TicketFile } from '@condo/domains/ticket/utils/clientSchema'
+import { getTicketDefaultDeadline, buildTicketObserversPayload } from '@condo/domains/ticket/utils/helpers'
+
+
+export const ApplyChangesActionBar = ({ handleSave, isLoading, form }) => {
+    const intl = useIntl()
+    const ApplyChangesMessage = intl.formatMessage({ id: 'ApplyChanges' })
+    const CancelLabel = intl.formatMessage({ id: 'Cancel' })
+    const AddressNotSelected = intl.formatMessage({ id: 'field.Property.nonSelectedError' })
+
+    const { push, query: { id } } = useRouter()
+    const onCancel = useCallback(() => {
+        push(`/ticket/${id}`)
+    }, [id, push])
+
+    const { ticketSetting, ticketSettingLoading } = useTicketFormContext()
+
+    return (
+        <Form.Item noStyle shouldUpdate>
+            {
+                ({ getFieldsValue, getFieldError }) => {
+                    const isPayable = form.getFieldValue('isPayable')
+                    const isEmergency = form.getFieldValue('isEmergency')
+                    const isWarranty = form.getFieldValue('isWarranty')
+
+                    const isRequiredDeadline = getTicketDefaultDeadline(ticketSetting, isPayable, isEmergency, isWarranty) !== null
+                    const { property, details, placeClassifier, categoryClassifier, deadline } = getFieldsValue(REQUIRED_TICKET_FIELDS)
+                    const propertyMismatchError = getFieldError('property').find((error)=>error.includes(AddressNotSelected))
+
+                    const disabledCondition = !property
+                        || !details
+                        || !placeClassifier
+                        || !categoryClassifier
+                        || !!propertyMismatchError
+                        || (isRequiredDeadline && !deadline)
+                        || ticketSettingLoading
+
+                    return (
+                        <ActionBar
+                            actions={[
+                                <TicketSubmitButton
+                                    key='submit'
+                                    ApplyChangesMessage={ApplyChangesMessage}
+                                    handleSave={handleSave}
+                                    isLoading={isLoading}
+                                    data-cy='ticket__apply-changes-button'
+                                    disabledCondition={disabledCondition}
+                                    property={property}
+                                    details={details}
+                                    placeClassifier={placeClassifier}
+                                    categoryClassifier={categoryClassifier}
+                                    deadline={deadline}
+                                    propertyMismatchError={propertyMismatchError}
+                                    isRequiredDeadline={isRequiredDeadline}
+                                />,
+                                <Button
+                                    key='cancel'
+                                    onClick={onCancel}
+                                    type='secondary'
+                                >
+                                    {CancelLabel}
+                                </Button>,
+                            ]}
+                        >
+                        </ActionBar>
+                    )
+                }
+            }
+        </Form.Item>
+    )
+}
+
+interface IUpdateTicketForm {
+    id: string
+}
+
+export const UpdateTicketForm: React.FC<IUpdateTicketForm> = ({ id }) => {
+    const intl = useIntl()
+    const DoneMsg = intl.formatMessage({ id: 'OperationCompleted' })
+    const ChangesSavedMsg = intl.formatMessage({ id: 'ChangesSaved' })
+    const ConcurrentUpdateMessage = intl.formatMessage({ id: 'pages.condo.ticket.notification.concurrentUpdate.message' })
+    const ConcurrentUpdateDescription = intl.formatMessage({ id: 'pages.condo.ticket.notification.concurrentUpdate.description' })
+    const ConcurrentUpdateLink = intl.formatMessage({ id: 'pages.condo.ticket.notification.concurrentUpdate.link' })
+
+    const { replace } = useRouter()
+    const { persistor } = useCachePersistor()
+    const { useFlag } = useFeatureFlags()
+    const isTicketObserversEnabled = useFlag(TICKET_OBSERVERS)
+    const isAutoAssignAllEnabled = useFlag(AUTO_ASSIGN_ALL_TICKETS)
+    const { obj, loading: ticketLoading, refetch, error } = Ticket.useObject({ where: { id } })
+    const initialUpdatedAtRef = useRef<string | null>(null)
+    const [fetchTicketUpdatedAt] = useGetTicketUpdatedAtLazyQuery({ fetchPolicy: 'network-only' })
+
+    useEffect(() => {
+        if (obj?.updatedAt && !initialUpdatedAtRef.current) {
+            initialUpdatedAtRef.current = obj.updatedAt
+        }
+    }, [obj])
+    const { objs: files, refetch: refetchFiles } = TicketFile.useObjects({ where: { ticket: { id } } })
+    const { objs: invoices, loading: invoicesLoading } = Invoice.useObjects({ where: { ticket: { id } } })
+    const {
+        data: observersData,
+        loading: observersLoading,
+    } = useGetTicketObserversByTicketIdQuery({
+        variables: {
+            ticketId: id,
+        },
+        skip: !isTicketObserversEnabled || !id || !persistor,
+    })
+    const observers = useMemo(() => observersData?.observers?.filter((o) => o?.user?.id) || [], [observersData?.observers])
+
+    const ticketOrganizationId = useMemo(() => obj?.organization?.id || null, [obj])
+
+    const { 
+        data: employeesData,
+        loading: employeesLoading,
+    } = useGetEmployeesByOrganizationIdAndUserIdsQuery({
+        variables: {
+            organizationId: ticketOrganizationId,
+            userIds: observers.map(o => o?.user?.id),
+        },
+        skip: !isTicketObserversEnabled || !ticketOrganizationId || !persistor || observers.length === 0,
+    })
+
+    const allowedObserverUserIds = useMemo(() => {
+        const employees = employeesData?.employees?.filter(Boolean) || []
+        return new Set(employees.map(e => e?.user?.id).filter(Boolean))
+    }, [employeesData])
+
+    // no redirect after mutation as we need to wait for ticket files to save
+    const [action] = useUpdateTicketMutation({})
+    const createInvoiceAction = Invoice.useCreate({})
+    const updateInvoiceAction = Invoice.useUpdate({})
+
+    const updateAction = async (values) => {
+        const { existedInvoices, newInvoices, observers: newObserverUserIds, ...ticketValues } = values
+
+        const freshData = await fetchTicketUpdatedAt({ variables: { id } })
+        const freshUpdatedAt = freshData?.data?.ticket?.[0]?.updatedAt
+        if (freshUpdatedAt && initialUpdatedAtRef.current && freshUpdatedAt !== initialUpdatedAtRef.current) {
+            notification.error({
+                message: <Typography.Text size='large' strong>{ConcurrentUpdateMessage}</Typography.Text>,
+                description: (
+                    <>
+                        {ConcurrentUpdateDescription}
+                        <br />
+                        <Typography.Link href={`/ticket/${id}/update`} target='_blank' rel='noreferrer'>
+                            {ConcurrentUpdateLink}
+                        </Typography.Link>
+                    </>
+                ),
+                duration: 0,
+            })
+            return
+        }
+
+        const observersUpdatePayload = buildTicketObserversPayload({
+            existingObserversList: observers,
+            updatedObserverUserIds: newObserverUserIds,
+            isEnabled: isTicketObserversEnabled,
+        })
+
+        const ticketData = await action({
+            variables: {
+                id: obj.id,
+                data: {
+                    ...Ticket.formValuesProcessor(ticketValues),
+                    ...(observersUpdatePayload ? { observers: observersUpdatePayload } : {}),
+                    dv: 1,
+                    sender: getClientSideSenderInfo(),
+                },
+            },
+        })
+        const ticket = ticketData?.data?.ticket
+
+        if (!isEmpty(newInvoices)) {
+            for (const invoiceFromForm of newInvoices) {
+                const payload = Invoice.formValuesProcessor({
+                    ...invoiceFromForm,
+                    ticket: ticket.id,
+                }, intl, true)
+
+                await createInvoiceAction(payload)
+            }
+        }
+
+        if (!isEmpty(existedInvoices)) {
+            const notUpdatableFields = ['ticket', 'property', 'unitName', 'unitType', 'contact', 'clientName', 'clientPhone', 'client']
+
+            for (const existedInvoice of existedInvoices) {
+                const initialInvoice = invoices.find(invoice => invoice.id === existedInvoice.id)
+
+                const editedFields = reduce(initialInvoice, (result, value, key) => {
+                    if (notUpdatableFields.includes(key)) {
+                        return result
+                    }
+
+                    if (key === 'rows') {
+                        const fieldsToPick = ['count', 'isMin', 'name', 'sku', 'toPay']
+                        const updatedRows = existedInvoice[key]
+
+                        if (get(value, 'length') !== updatedRows.length) {
+                            return result.concat(key)
+                        }
+
+                        for (let i = 0; i < updatedRows.length; i++) {
+                            const updatedRow = updatedRows[i]
+                            const initialRow = value[i]
+
+                            if (!isEqual(pick(initialRow, fieldsToPick), pick(updatedRow, fieldsToPick))) {
+                                return result.concat(key)
+                            }
+                        }
+
+                        return result
+                    } else {
+                        return isEqual(value, existedInvoice[key]) ?
+                            result : result.concat(key)
+                    }
+                }, [])
+
+                if (!isEmpty(editedFields)) {
+                    await updateInvoiceAction(pick(existedInvoice, editedFields), existedInvoice)
+                }
+            }
+        }
+
+        return ticket
+    }
+
+    useEffect(() => {
+        refetch()
+        refetchFiles()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    const ticketSourceType = useMemo(() => get(obj, ['source', 'type']), [obj])
+    const ticketAssignee = useMemo(() => get(obj, 'assignee'), [obj])
+
+    const autoAssign = isEmpty(ticketAssignee) && (
+        isAutoAssignAllEnabled || AUTO_ASSIGN_SOURCE_TYPES.includes(ticketSourceType)
+    )
+
+    const initialValues  = useMemo(() => {
+        const result = { ...Ticket.convertToFormState(obj) }
+        if (invoices) {
+            result['invoices'] = invoices.map(invoice => invoice.id)
+        }
+
+        if (Array.isArray(observers) && observers.length > 0) {
+            result['observers'] = observers
+                .map(o => o?.user?.id)
+                .filter((userId) => userId && allowedObserverUserIds.has(userId))
+        }
+
+        return result
+    }, [observers, allowedObserverUserIds, invoices, obj])
+
+    const loading = ticketLoading || invoicesLoading || observersLoading || employeesLoading
+    if (error || loading) {
+        return (
+            <>
+                {(loading) ? <Loader fill size='large'/> : null}
+                {(error) ? <Typography.Title>{error}</Typography.Title> : null}
+            </>
+        )
+    }
+
+    return (
+        <BaseTicketForm
+            autoAssign={autoAssign}
+            action={updateAction}
+            initialValues={initialValues}
+            organization={get(obj, 'organization')}
+            files={files}
+            afterActionCompleted={(ticket) => {
+                notification.success({
+                    message: <Typography.Text size='large' strong>{DoneMsg}</Typography.Text>,
+                    description: ChangesSavedMsg,
+                })
+                replace(`/ticket/${ticket.id}`)
+            }}
+            OnCompletedMsg={null}
+            isExisted={Boolean(obj)}
+        >
+            {({ handleSave, isLoading, form }) => <ApplyChangesActionBar handleSave={handleSave} isLoading={isLoading} form={form} />}
+        </BaseTicketForm>
+    )
+}

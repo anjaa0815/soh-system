@@ -1,0 +1,8 @@
+{
+  "name": "@condo/domains",
+  "private": true,
+  "license": "see the LICENSE file in the repo root",
+  "main": "./index.js",
+  "version": "1.0.0",
+  "dependencies": {}
+}

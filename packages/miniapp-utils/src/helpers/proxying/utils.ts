@@ -1,0 +1,212 @@
+import jwt from 'jsonwebtoken'
+import proxyAddr from 'proxy-addr'
+import { z } from 'zod'
+
+import { isInSubnet } from '../ip'
+
+import type { IncomingMessage } from 'http'
+
+type ProxyConfig = {
+    address: string | Array<string>
+    secret: string
+}
+
+type ProxyId = string
+
+export type KnownProxies = Record<ProxyId, ProxyConfig>
+
+export type TrustProxyFunction = (proxyAddr: string, idx: number) => boolean
+
+const _ipSchema = z.union([z.ipv4(), z.ipv6()])
+const _timeStampBasicRegexp = /^\d+$/
+
+const DEFAULT_PROXY_TIMEOUT_IN_MS = 5_000 // 5 sec to pass request is enough
+const X_PROXY_ID_HEADER = 'x-proxy-id' as const
+const X_PROXY_IP_HEADER = 'x-proxy-ip' as const
+const X_PROXY_TIMESTAMP_HEADER = 'x-proxy-timestamp' as const
+const X_PROXY_SIGNATURE_HEADER = 'x-proxy-signature' as const
+
+export type ProxyHeaders = {
+    [X_PROXY_ID_HEADER]: string
+    [X_PROXY_IP_HEADER]: string
+    [X_PROXY_TIMESTAMP_HEADER]: string
+    [X_PROXY_SIGNATURE_HEADER]: string
+}
+
+function _getTimestampFromHeader (timestamp: string) {
+    if (!_timeStampBasicRegexp.test(timestamp)) return Number.NaN
+    return (new Date(parseInt(timestamp))).getTime()
+}
+
+function _isProxyIP (ip: string, proxyConfig: KnownProxies[string]) {
+    const addresses = Array.isArray(proxyConfig.address) ? proxyConfig.address : [proxyConfig.address]
+    const config = addresses.reduce((acc, addr) => {
+        const isSubnet = addr.split('/').length > 1
+        if (isSubnet) {
+            acc.subnets.push(addr)
+        } else {
+            acc.ips.push(addr)
+        }
+
+        return acc
+    }, { ips: [] as Array<string>, subnets: [] as Array<string> })
+
+    if (config.ips.length && config.ips.includes(ip)) {
+        return true
+    }
+
+    return !!(config.subnets.length && isInSubnet(ip, config.subnets))
+}
+
+export function getRequestIp (req: IncomingMessage, trustProxyFn: TrustProxyFunction, knownProxies?: KnownProxies): string {
+    // NOTE: That's what express does under the hood: https://github.com/expressjs/express/blob/4.x/lib/request.js#L349
+    const originalIP = proxyAddr(req, trustProxyFn)
+
+    if (!knownProxies) return originalIP
+
+    const xProxyId = req.headers[X_PROXY_ID_HEADER]
+    const xProxyIp = req.headers[X_PROXY_IP_HEADER]
+    // NOTE: used to prevent relay attacks
+    const xProxyTimestamp = req.headers[X_PROXY_TIMESTAMP_HEADER]
+    const xProxySignature = req.headers[X_PROXY_SIGNATURE_HEADER]
+
+    if (
+        typeof xProxyId !== 'string' ||
+        typeof xProxyIp !== 'string' ||
+        typeof xProxyTimestamp !== 'string' ||
+        typeof xProxySignature !== 'string'
+    ) {
+        return originalIP
+    }
+
+    // NOTE: validate, that x-proxy-ip is correct IP
+    const { success: isValidIp } = _ipSchema.safeParse(xProxyIp)
+    if (!isValidIp) {
+        return originalIP
+    }
+
+    // NOTE: validate timestamp: it should less than now and no more than 5s less than now (recent enough)
+    const timestamp = _getTimestampFromHeader(xProxyTimestamp)
+    const now = Date.now()
+    if (
+        Number.isNaN(timestamp) ||
+        timestamp > now ||
+        now - timestamp > DEFAULT_PROXY_TIMEOUT_IN_MS
+    ) {
+        return originalIP
+    }
+
+    // NOTE: validate signature and proxy IP
+    if (!Object.hasOwn(knownProxies, xProxyId)) {
+        return originalIP
+    }
+    const proxyConfig = knownProxies[xProxyId]
+
+    if (!proxyConfig || !_isProxyIP(originalIP, proxyConfig)) {
+        return originalIP
+    }
+
+    try {
+        // NOTE: config is passed from outside, where its obtained from .env, so its not hard-coded
+        // nosemgrep: javascript.jsonwebtoken.security.jwt-hardcode.hardcoded-jwt-secret
+        const jwtPayload = jwt.verify(xProxySignature, proxyConfig.secret, { algorithms: ['HS256'] })
+        const expectedPayloadSchema = z.object({
+            [X_PROXY_TIMESTAMP_HEADER]: z.literal(xProxyTimestamp),
+            [X_PROXY_IP_HEADER]: z.literal(xProxyIp),
+            [X_PROXY_ID_HEADER]: z.literal(xProxyId),
+            method: z.literal(req.method),
+            url: z.literal(req.url),
+        })
+        const { success: isMatchingSignature } = expectedPayloadSchema.safeParse(jwtPayload)
+
+        return isMatchingSignature ? xProxyIp : originalIP
+    } catch {
+        return originalIP
+    }
+}
+
+export function getProxyHeadersForIp (method: string, url: string, ip: string, proxyId: string, secret: string): ProxyHeaders {
+    const timestampString = String(Date.now())
+
+    return {
+        [X_PROXY_IP_HEADER]: ip,
+        [X_PROXY_ID_HEADER]: proxyId,
+        [X_PROXY_TIMESTAMP_HEADER]: timestampString,
+        [X_PROXY_SIGNATURE_HEADER]: jwt.sign({
+            [X_PROXY_IP_HEADER]: ip,
+            [X_PROXY_ID_HEADER]: proxyId,
+            [X_PROXY_TIMESTAMP_HEADER]: timestampString,
+            method,
+            url,
+        }, secret, {
+            expiresIn: Math.round(DEFAULT_PROXY_TIMEOUT_IN_MS / 1000),
+            algorithm: 'HS256',
+        }),
+    }
+}
+
+export function isRelativeUrl (url: string) {
+    return url.startsWith('/')
+}
+
+export function replaceUpstreamEndpoint ({
+    endpoint,
+    proxyPrefix,
+    upstreamPrefix,
+    upstreamOrigin,
+    rewrites = {},
+}: {
+    endpoint: string
+    proxyPrefix: string
+    upstreamPrefix: string
+    upstreamOrigin: string
+    rewrites?: Record<string, string>
+}) {
+    const isRelativeLocation = isRelativeUrl(endpoint)
+    const locationUrl = new URL(endpoint, 'https://_')
+
+    let targetLocation
+
+    const lookupUrl = new URL(endpoint, upstreamOrigin)
+    lookupUrl.search = ''
+    // First lookup relative location ('/some/path')
+    if (isRelativeLocation || lookupUrl.origin === upstreamOrigin) {
+        targetLocation ??= rewrites[lookupUrl.pathname]
+    }
+
+    // Then lookup absolute location ('https://upstreamhost.com/some/path')
+    targetLocation ??= rewrites[lookupUrl.toString()]
+
+    // If found lookup, perform smart replacement
+    if (targetLocation) {
+        const isRelativeTarget = isRelativeUrl(targetLocation)
+        const targetUrl = new URL(targetLocation, upstreamOrigin)
+        const targetSearchParams = new URLSearchParams(targetUrl.searchParams)
+        // Replace target search params with location search params, then apply target search params on top
+        if (!targetUrl.hash) {
+            targetUrl.hash = locationUrl.hash
+        }
+        targetUrl.search = locationUrl.search
+        for (const [name] of targetSearchParams.entries()) {
+            targetUrl.searchParams.delete(name)
+        }
+        for (const [name, value] of targetSearchParams.entries()) {
+            targetUrl.searchParams.append(name, value)
+        }
+
+        if (isRelativeTarget) {
+            return targetUrl.pathname + targetUrl.search + targetUrl.hash
+        } else {
+            return targetUrl.toString()
+        }
+    }
+
+    // If location is relative or has same as upstream domain, try to replace back upstreamPrefix with proxyPrefix
+    if ((isRelativeLocation || locationUrl.origin === upstreamOrigin) && locationUrl.pathname.startsWith(upstreamPrefix)) {
+        locationUrl.pathname = proxyPrefix + locationUrl.pathname.slice(upstreamPrefix.length)
+
+        return locationUrl.pathname + locationUrl.search + locationUrl.hash
+    }
+
+    return endpoint
+}

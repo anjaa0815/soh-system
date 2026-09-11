@@ -1,0 +1,62 @@
+.wrapper {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--condo-global-spacing-8));
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(60vh, calc(100dvh - 96px));
+  overflow: hidden;
+  background-color: var(--condo-global-color-white);
+  border: 1px solid var(--condo-global-color-gray-3);
+  border-radius: var(--condo-global-border-radius-large);
+  box-shadow: var(--condo-global-box-shadow-default);
+}
+
+.notification {
+  width: 100%;
+  min-height: 0;
+  padding: var(--condo-global-spacing-12);
+  overflow: hidden;
+  background-color: var(--condo-global-color-white);
+}
+
+.notification > div {
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.status {
+  display: flex;
+  gap: var(--condo-global-spacing-12);
+  align-items: center;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* Match textarea line breaks after "Apply" (plain text with \n, not Markdown). */
+.result-text {
+  display: block;
+  max-height: min(45vh, calc(100dvh - 180px));
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
