@@ -3,10 +3,11 @@
  */
 
 const conf = require('@open-condo/config')
+const { GQLError, GQLErrorCode: { BAD_USER_INPUT, INTERNAL_ERROR } } = require('@open-condo/keystone/errors')
 const { checkDvAndSender } = require('@open-condo/keystone/plugins/dvAndSender')
 const { GQLCustomSchema, getById, find } = require('@open-condo/keystone/schema')
+
 const access = require('@condo/domains/acquiring/access/CreateAcquiringPaymentDetailsService')
-const { GQLError, GQLErrorCode: { BAD_USER_INPUT, INTERNAL_ERROR } } = require('@open-condo/keystone/errors')
 const { getProviderByIntegrationName } = require('@condo/domains/acquiring/integrations/providers')
 const { DV_VERSION_MISMATCH, WRONG_FORMAT, NOT_FOUND } = require('@condo/domains/common/constants/errors')
 
@@ -101,7 +102,7 @@ const CreateAcquiringPaymentDetailsService = new GQLCustomSchema('CreateAcquirin
                         amount: multiPayment.amount,
                         description: `Payment #${multiPaymentId}`,
                         orderId: multiPaymentId,
-                        callbackUrl: `${conf.SERVER_URL}/api/webhooks/acquiring/${provider.slug}`,
+                        callbackUrl: `${conf.SERVER_URL}/api/webhooks/acquiring/${provider.slug}/${multiPaymentId}`,
                     })
                 } catch (error) {
                     throw new GQLError({

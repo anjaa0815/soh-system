@@ -80,8 +80,15 @@ async function createPayment (settings, { amount, description, orderId, callback
  * QPay's callback payload is not treated as trustworthy by itself - the documented
  * integration pattern is to re-check payment status server-to-server after receiving
  * a callback, rather than trust the callback body/signature directly.
+ *
+ * `orderId` here is OUR OWN id (the same `sender_invoice_no` passed to createPayment,
+ * in practice the MultiPayment id) rather than QPay's own `invoice_id` - we never
+ * persist QPay's invoice_id anywhere, so there is nothing else to check by. This
+ * assumes QPay's check endpoint accepts `object_id` as our sender_invoice_no; that is
+ * NOT confirmed against real docs (same caveat as the rest of this file) - verify
+ * before production use, and switch to a stored invoice_id if it turns out required.
  */
-async function checkPaymentStatus (settings, externalId) {
+async function checkPaymentStatus (settings, orderId) {
     const accessToken = await getAccessToken(settings)
 
     const res = await fetch(`${QPAY_BASE_URL}/payment/check`, {
@@ -92,7 +99,7 @@ async function checkPaymentStatus (settings, externalId) {
         },
         body: JSON.stringify({
             object_type: 'INVOICE',
-            object_id: externalId,
+            object_id: orderId,
         }),
     })
 
