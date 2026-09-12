@@ -1,9 +1,9 @@
 # iot-gateway
 
-Bridges building hardware — MQTT sensors, ONVIF IP cameras, RS-485/Modbus meters — into
-the condo platform. condo itself never speaks these protocols or listens for inbound
-device connections; this app is the piece that does, translating hardware events into
-GraphQL calls against condo's own API.
+Bridges building hardware — MQTT sensors, ONVIF cameras/NVRs (e.g. a gate's access-
+control recorder), RS-485/Modbus meters — into the condo platform. condo itself never
+speaks these protocols or listens for inbound device connections; this app is the piece
+that does, translating hardware events into GraphQL calls against condo's own API.
 
 ## Why a separate app
 
@@ -20,7 +20,7 @@ as its own process/service, exactly like this one.
 |---|---|---|
 | MQTT | `src/adapters/mqttAdapter.js` | Fully implemented, end-to-end tested (see `demo/`) against a real MQTT broker and a live condo instance. |
 | RS-485 / Modbus | `src/adapters/rs485Adapter.js` | Implemented against the `modbus-serial` API, **not tested against real hardware** — register addresses/scaling are illustrative and must be adjusted to your meters' actual Modbus map. |
-| ONVIF (cameras) | `src/adapters/onvifAdapter.js` | Implemented against the `onvif` package's API, **not tested against a real camera** — event topic names vary by manufacturer and must be verified against your specific camera model. |
+| ONVIF (cameras/NVR) | `src/adapters/onvifAdapter.js` | Implemented against the `onvif` package's API, including multi-channel NVR support (`listChannels`, per-channel snapshot/stream URIs) — **not tested against real hardware**. Motion event topic names vary by manufacturer and must be verified against your specific camera/NVR model. |
 
 ## Two kinds of meter reading
 
@@ -99,6 +99,48 @@ produces a fresh, non-matching cache entry — hence "not found". This is a cond
 quirk of testing against the fake client, not a bug in this gateway's request, which
 was built and verified field-for-field against `RegisterPropertyMetersReadingsService.js`'s
 actual GraphQL schema.
+
+## Deployment: runs on the compound's LAN
+
+This gateway (and `OnvifAdapter` in particular) is meant to run **inside the
+compound's own local network**, on the same LAN as the gate's NVR/cameras and any
+RS-485 bus — not in condo's cloud, and not reachable from the internet. It only pushes
+normalized, summarized data out (a meter reading, a "motion at the gate" event); it
+never exposes the NVR, a raw camera stream, or the RS-485 bus to anything outside that
+LAN. Concretely: a small on-site machine (or a container on one) runs
+`npm start` with its `.env` pointed at `CONDO_API_URL=https://<your-condo-domain>/admin/api`
+and `MQTT_BROKER_URL`/`ONVIF_CAMERAS`/`RS485_SERIAL_PORT` pointed at devices on that
+same local network.
+
+## Cameras: single camera vs NVR
+
+`ONVIF_CAMERAS` accepts one entry per physical camera, or **one entry per NVR** — an
+NVR is just an ONVIF device that reports multiple channels (one per camera plugged
+into it) instead of one. `OnvifAdapter.start()` connects and calls
+`onvifAdapter.listChannels()` to see what came back:
+
+```js
+[{ device: 'gate-nvr', profileToken: 'Profile_1', name: 'Гарц 1 - орох' },
+ { device: 'gate-nvr', profileToken: 'Profile_2', name: 'Гарц 1 - гарах' }]
+```
+
+Motion events are tagged with `device`/`channel`/`profileToken` so a multi-channel NVR
+can tell you *which* gate camera triggered, not just that "something" on the NVR did.
+
+### From snapshots to live video
+
+`OnvifAdapter.getSnapshotUri(device, profileToken)` and `.getStreamUri(...)` return
+URIs the NVR itself serves (still needing its own auth to fetch) — this adapter doesn't
+proxy or store images. Two very different levels of effort follow from there:
+
+- **Snapshot polling** (cheap): have whatever displays camera state (a condo miniapp
+  page, an internal dashboard) fetch the snapshot URI every few seconds. No new
+  infrastructure — just an HTTP GET per refresh.
+- **Live video in a browser** (real infrastructure): browsers can't play RTSP directly.
+  `getStreamUri` returns an RTSP URL that needs transcoding — typically an `ffmpeg`
+  process (or a service like `mediamtx`/`go2rtc`) converting RTSP to HLS or WebRTC,
+  run somewhere reachable by whoever's viewing. This is a genuinely separate piece of
+  infrastructure, not something this gateway does today.
 
 ## Wiring camera events to condo
 

@@ -24,11 +24,12 @@ async function main () {
     if (config.onvif.enabled) {
         const onvifAdapter = new OnvifAdapter(config.onvif.cameras)
         await onvifAdapter.start()
+        logger.info('onvif: channels available', onvifAdapter.listChannels())
         bridge.useCameraAdapter(onvifAdapter, async (event) => {
             // TODO: wire this to whatever condo action fits your organization —
             // e.g. call a createTicket-style mutation with the right property/classifier
             // ids for the camera's location. See README.md, "Wiring camera events".
-            logger.warn('motion event received but no condo action is wired up yet', event.camera)
+            logger.warn('motion event received but no condo action is wired up yet', event.device, event.channel)
         })
     }
 
