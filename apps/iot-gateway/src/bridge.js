@@ -1,7 +1,7 @@
 const { EventEmitter } = require('events')
 
 const { logger } = require('./logger')
-const { toMeterReadingInput } = require('./normalizers/toMeterReading')
+const { toMeterReadingInput, toPropertyMeterReadingInput } = require('./normalizers/toMeterReading')
 
 /**
  * Wires protocol adapters (MQTT/ONVIF/RS-485 — anything that emits normalized events)
@@ -46,10 +46,13 @@ class Bridge extends EventEmitter {
     }
 
     async _handleReading (rawReading) {
+        const isPropertyMeter = rawReading.scope === 'property'
         try {
-            const input = toMeterReadingInput(rawReading)
-            const [result] = await this.condoClient.registerMeterReadings([input])
+            const result = isPropertyMeter
+                ? (await this._registerPropertyReading(rawReading))
+                : (await this._registerUnitReading(rawReading))
             logger.info('registered reading', {
+                scope: isPropertyMeter ? 'property' : 'unit',
                 meterNumber: rawReading.meterNumber,
                 resource: rawReading.resource,
                 value: rawReading.value,
@@ -60,6 +63,18 @@ class Bridge extends EventEmitter {
             logger.error('failed to register reading', rawReading, err.message)
             this.emit('registerError', { rawReading, error: err })
         }
+    }
+
+    async _registerUnitReading (rawReading) {
+        const input = toMeterReadingInput(rawReading)
+        const [result] = await this.condoClient.registerMeterReadings([input])
+        return result
+    }
+
+    async _registerPropertyReading (rawReading) {
+        const input = toPropertyMeterReadingInput(rawReading)
+        const [result] = await this.condoClient.registerPropertyMeterReadings([input])
+        return result
     }
 }
 

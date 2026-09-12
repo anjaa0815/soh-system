@@ -10,9 +10,13 @@ const { logger } = require('../logger')
  * Expected topic shape: `meters/<meterNumber>/reading` (configurable via `topicPattern`,
  * using standard MQTT wildcards, e.g. `meters/+/reading` or `building/+/+/reading`).
  *
- * Expected JSON payload:
+ * Expected JSON payload (a resident's own meter):
  *   { "address": "...", "unitName": "45", "accountNumber": "...",
  *     "resource": "coldWater", "value": 123.45, "timestamp": "2026-09-12T10:00:00Z" }
+ *
+ * Or, for a whole-building meter the HOA pays for (main entrance electricity riser,
+ * common water supply, ...), set `"scope": "property"` and omit unitName/accountNumber:
+ *   { "scope": "property", "address": "...", "resource": "electricity", "value": 88450 }
  *
  * `meterNumber` is taken from the topic's second segment unless the payload provides
  * its own `meterNumber` field (useful when one device reports for multiple meters).
@@ -69,6 +73,7 @@ class MqttAdapter extends EventEmitter {
         const topicMeterNumber = topic.split('/')[1]
 
         return {
+            scope: payload.scope || 'unit',
             address: payload.address,
             unitType: payload.unitType,
             unitName: payload.unitName,

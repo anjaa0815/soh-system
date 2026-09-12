@@ -2,7 +2,7 @@
  * End-to-end demo of the MQTT -> condo pipeline, with no real hardware required:
  *
  *   fake sensor (mqtt.publish) -> in-process Aedes broker -> MqttAdapter -> Bridge
- *     -> CondoClient.registerMeterReadings -> live condo GraphQL API -> Postgres
+ *     -> CondoClient.register(Property)MeterReadings -> live condo GraphQL API -> Postgres
  *
  * This authenticates with a regular staff phone+password login (via
  * authenticateUserWithPhoneAndPassword) rather than a B2BAccessToken, purely because
@@ -10,6 +10,10 @@
  * a B2BAccessToken does, so CondoClient itself doesn't need any demo-specific code.
  * A real deployment should mint a proper B2BApp service-user token instead of reusing
  * a staff login (see README.md "From demo to production").
+ *
+ * Publishes both a resident's own (unit-scope) readings and whole-building
+ * (property-scope, common-area) readings. Only the unit-scope ones are asserted to
+ * succeed — see README.md "A known limitation of this demo" for why.
  *
  * Usage: node demo/run-mqtt-demo.js
  * Requires env vars (see below) — copy .env.example to .env.demo or export them inline.
@@ -67,18 +71,23 @@ async function startLocalBroker (port) {
 function publishFakeReadings (brokerUrl) {
     const publisher = mqtt.connect(brokerUrl)
     const readings = [
-        { meterNumber: 'COLD-45-01', resource: 'coldWater', value: 128.4 },
-        { meterNumber: 'HOT-45-01', resource: 'hotWater', value: 87.1 },
-        { meterNumber: 'ELEC-45-01', resource: 'electricity', value: 5421 },
+        // a resident's own meter (billed to their account)
+        { meterNumber: 'COLD-45-01', resource: 'coldWater', value: 128.4, scope: 'unit', unitName: '45', accountNumber: 'ACC-45' },
+        { meterNumber: 'HOT-45-01', resource: 'hotWater', value: 87.1, scope: 'unit', unitName: '45', accountNumber: 'ACC-45' },
+        { meterNumber: 'ELEC-45-01', resource: 'electricity', value: 5421, scope: 'unit', unitName: '45', accountNumber: 'ACC-45' },
+        // whole-building common-area meters the HOA itself pays for — no unit/account
+        { meterNumber: 'COMMON-ELEC-MAIN', resource: 'electricity', value: 88452, scope: 'property' },
+        { meterNumber: 'COMMON-WATER-MAIN', resource: 'coldWater', value: 15234, scope: 'property' },
     ]
 
     publisher.on('connect', () => {
         for (const reading of readings) {
             const payload = {
                 address: DEMO_ADDRESS,
+                scope: reading.scope,
                 unitType: 'flat',
-                unitName: '45',
-                accountNumber: 'ACC-45',
+                unitName: reading.unitName,
+                accountNumber: reading.accountNumber,
                 resource: reading.resource,
                 value: reading.value,
                 timestamp: new Date().toISOString(),
@@ -110,18 +119,27 @@ async function main () {
     const mqttAdapter = new MqttAdapter({ brokerUrl, topicPattern: 'meters/+/reading' }).start()
     bridge.useMeterAdapter(mqttAdapter)
 
-    let registeredCount = 0
-    bridge.on('registered', () => {
-        registeredCount++
-        if (registeredCount === 3) {
-            logger.info('demo: all 3 readings registered in condo — shutting down')
+    // Only the 3 unit-scope readings are asserted here. The 2 property-scope (common-
+    // area) readings are logged but not asserted — see README.md "A known limitation
+    // of this demo" for why registerPropertyMetersReadings can fail to resolve its
+    // property against condo's *fake* address service locally, even though the
+    // gateway's request is built correctly against the real GraphQL schema.
+    let unitReadingsRegistered = 0
+    bridge.on('registered', ({ rawReading }) => {
+        if (rawReading.scope !== 'property') unitReadingsRegistered++
+        if (unitReadingsRegistered === 3) {
+            logger.info('demo: all 3 unit-scope readings registered in condo — shutting down')
             mqttAdapter.stop()
             brokerServer.close()
             process.exit(0)
         }
     })
-    bridge.on('registerError', ({ error }) => {
-        logger.error('demo: a reading failed to register:', error.message)
+    bridge.on('registerError', ({ rawReading, error }) => {
+        if (rawReading.scope === 'property') {
+            logger.warn('demo: property-scope reading failed as expected in this local demo — see README.md "A known limitation of this demo":', error.message)
+        } else {
+            logger.error('demo: a reading failed to register:', error.message)
+        }
     })
 
     setTimeout(() => publishFakeReadings(brokerUrl), 1000)

@@ -9,6 +9,15 @@ const REGISTER_METERS_READINGS = gql`
     }
 `
 
+const REGISTER_PROPERTY_METERS_READINGS = gql`
+    mutation registerPropertyMetersReadings($data: RegisterPropertyMetersReadingsInput!) {
+        result: registerPropertyMetersReadings(data: $data) {
+            id
+            meter { id number }
+        }
+    }
+`
+
 const SENDER = { dv: 1, fingerprint: 'iot-gateway' }
 
 class CondoClient {
@@ -36,6 +45,26 @@ class CondoClient {
         if (readingInputs.length === 0) return []
 
         const data = await this.client.request(REGISTER_METERS_READINGS, {
+            data: {
+                dv: 1,
+                sender: SENDER,
+                organization: { id: this.organizationId },
+                readings: readingInputs,
+            },
+        })
+
+        return data.result
+    }
+
+    /**
+     * Registers readings for whole-building meters — common-area electricity/water
+     * the HOA itself pays for, not tied to any resident's billing account.
+     * @param {import('./normalizers/toMeterReading').RawReading[]} readingInputs
+     */
+    async registerPropertyMeterReadings (readingInputs) {
+        if (readingInputs.length === 0) return []
+
+        const data = await this.client.request(REGISTER_PROPERTY_METERS_READINGS, {
             data: {
                 dv: 1,
                 sender: SENDER,

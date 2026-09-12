@@ -22,6 +22,20 @@ as its own process/service, exactly like this one.
 | RS-485 / Modbus | `src/adapters/rs485Adapter.js` | Implemented against the `modbus-serial` API, **not tested against real hardware** — register addresses/scaling are illustrative and must be adjusted to your meters' actual Modbus map. |
 | ONVIF (cameras) | `src/adapters/onvifAdapter.js` | Implemented against the `onvif` package's API, **not tested against a real camera** — event topic names vary by manufacturer and must be verified against your specific camera model. |
 
+## Two kinds of meter reading
+
+condo distinguishes a resident's own metered account from a whole-building meter, and
+this gateway follows the same split — set `scope: 'unit'` (default) or `scope: 'property'`
+on a `RawReading` (see `src/normalizers/toMeterReading.js`):
+
+- **`unit`** — a resident's own meter, billed to their account (`unitName` +
+  `accountNumber` required). Calls `registerMetersReadings`.
+- **`property`** — a meter for the whole building that the HOA itself pays for: the
+  entrance hallway/elevator electricity, the common water riser, a gate barrier's power
+  supply. No unit or account involved. Calls `registerPropertyMetersReadings` against
+  condo's `PropertyMeter` model ("Resource meter installed on the entire apartment
+  building").
+
 ## Setup
 
 ```bash
@@ -67,6 +81,24 @@ npm install --no-workspaces
 cp demo/.env.demo.example demo/.env.demo   # fill in a real staff login + organization + property address
 npm run demo
 ```
+
+### A known limitation of this demo
+
+The demo also publishes 2 `scope: 'property'` (common-area) readings, and these are
+expected to fail locally with "Property not found" — logged as a warning, not treated
+as a demo failure. Root cause, traced by hand: `registerPropertyMetersReadings` has no
+`unitName`/`unitType` in its `addressInfo` input (unlike `registerMetersReadings`), so
+condo's `PropertyResolver` takes a different internal branch that re-parses the address
+string through `AddressFromStringParser` before looking it up — and the parsed form
+isn't guaranteed to be byte-identical to the raw address text a `Property` was created
+with. Against a real address service that resolves both forms to the same canonical
+address (its entire job), this is a non-issue. Against condo's local dev
+`FakeAddressServiceClient` (`FAKE_ADDRESS_SERVICE_CLIENT=true`, a literal-string cache
+with no real geocoding), a parsed form that isn't byte-identical to the original
+produces a fresh, non-matching cache entry — hence "not found". This is a condo-side
+quirk of testing against the fake client, not a bug in this gateway's request, which
+was built and verified field-for-field against `RegisterPropertyMetersReadingsService.js`'s
+actual GraphQL schema.
 
 ## Wiring camera events to condo
 

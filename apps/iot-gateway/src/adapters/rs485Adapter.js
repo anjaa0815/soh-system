@@ -19,9 +19,13 @@ const { logger } = require('../logger')
  * @property {string} meterNumber
  * @property {string} resource - see normalizers/meterResources.js for valid values
  * @property {number} registerAddress - holding register to read the current value from
+ * @property {'unit'|'property'} [scope] - 'unit' (default, a resident's own metered
+ *   account) or 'property' (a whole-building meter — e.g. the entrance hallway/
+ *   elevator/common water riser — that the HOA itself pays for)
  * @property {string} [address] - property address (usually fixed per gateway instance/site)
- * @property {string} [unitName] - apartment/unit number this meter belongs to
- * @property {string} [accountNumber]
+ * @property {string} [unitName] - apartment/unit number this meter belongs to. Only
+ *   meaningful for scope 'unit'.
+ * @property {string} [accountNumber] - only meaningful for scope 'unit'.
  */
 class Rs485Adapter extends EventEmitter {
     /**
@@ -77,6 +81,7 @@ class Rs485Adapter extends EventEmitter {
         const value = (data[0] << 16 | data[1]) / 1000 // example: raw units -> m3/kWh
 
         return {
+            scope: device.scope || 'unit',
             address: device.address,
             unitType: device.unitType,
             unitName: device.unitName,
