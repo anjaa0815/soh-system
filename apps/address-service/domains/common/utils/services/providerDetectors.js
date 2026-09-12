@@ -3,11 +3,12 @@ const get = require('lodash/get')
 const conf = require('@open-condo/config')
 const { getLogger } = require('@open-condo/keystone/logging')
 
-const { DADATA_PROVIDER, GOOGLE_PROVIDER, PULLENTI_PROVIDER } = require('@address-service/domains/common/constants/providers')
+const { DADATA_PROVIDER, GOOGLE_PROVIDER, PULLENTI_PROVIDER, ZIPCODE_MN_PROVIDER } = require('@address-service/domains/common/constants/providers')
 const {
     DadataSearchProvider,
     GoogleSearchProvider,
     PullentiSearchProvider,
+    ZipcodeMnSearchProvider,
 } = require('@address-service/domains/common/utils/services/search/providers')
 const {
     GoogleSuggestionProvider,
@@ -41,6 +42,9 @@ function getSearchProvider (args) {
             break
         case PULLENTI_PROVIDER:
             searchProvider = new PullentiSearchProvider(args)
+            break
+        case ZIPCODE_MN_PROVIDER:
+            searchProvider = new ZipcodeMnSearchProvider(args)
             break
     }
 
