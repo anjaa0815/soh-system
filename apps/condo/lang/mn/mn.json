@@ -3197,7 +3197,7 @@
   "pages.organizations.serviceProvider": "Үйлчилгээ үзүүлэгч",
   "pages.organizations.tin": "РД",
   "pages.organizations.tin.InvalidValue": "РД талбарын утга хүчингүй байна",
-  "pages.organizations.tin.TooShortMessage": "РД талбар 10 оронтой байх ёстой",
+  "pages.organizations.tin.TooShortMessage": "РД талбар 7 оронтой байх ёстой",
   "pages.paymentConfirm.PageTitle": "Төлбөр",
   "pages.paymentConfirm.VerifyPaymentAmount": "Төлбөрийн дүнг баталгаажуулах",
   "pages.reports.incidentsDescription": "осолын бүртгэлийн мэдээлэлд үндэслэсэн",
