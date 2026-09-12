@@ -8,7 +8,12 @@ function getProviderBySlug (slug) {
     return PROVIDERS.find((provider) => provider.slug === slug) || null
 }
 
+function getProviderByIntegrationName (name) {
+    return PROVIDERS.find((provider) => provider.name === name) || null
+}
+
 module.exports = {
     PROVIDERS,
     getProviderBySlug,
+    getProviderByIntegrationName,
 }

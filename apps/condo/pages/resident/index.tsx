@@ -7,6 +7,7 @@ import { Typography } from '@open-condo/ui'
 
 import { prefetchAuth } from '@condo/domains/common/utils/next/auth'
 import { PageComponentType } from '@condo/domains/common/types'
+import { ResidentBillsList } from '@condo/domains/resident/components/ResidentBillsList'
 import ResidentLayout from '@condo/domains/user/components/containers/ResidentLayout'
 
 
@@ -23,6 +24,9 @@ const ResidentDashboardPage: PageComponentType = () => {
                     <Typography.Title level={2}>
                         {TitleMessage}
                     </Typography.Title>
+                </Col>
+                <Col span={24}>
+                    <ResidentBillsList />
                 </Col>
                 <Col span={24}>
                     <Typography.Text type='secondary'>

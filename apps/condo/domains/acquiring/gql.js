@@ -112,6 +112,12 @@ const REGISTER_EXTERNAL_PAYMENTS_MUTATION = gql`
     }
 `
 
+const CREATE_ACQUIRING_PAYMENT_DETAILS_MUTATION = gql`
+    mutation createAcquiringPaymentDetails ($data: CreateAcquiringPaymentDetailsInput!) {
+        result: createAcquiringPaymentDetails(data: $data) { providerSlug qrText qrImageBase64 }
+    }
+`
+
 /* AUTOGENERATE MARKER <CONST> */
 
 const EXPORT_PAYMENTS_TO_EXCEL =  gql`
@@ -145,5 +151,6 @@ module.exports = {
     PAYMENT_STATUS_CHANGE_WEBHOOK_URL_FIELDS,
     PaymentStatusChangeWebhookUrl,
     REGISTER_EXTERNAL_PAYMENTS_MUTATION,
+    CREATE_ACQUIRING_PAYMENT_DETAILS_MUTATION,
 /* AUTOGENERATE MARKER <EXPORTS> */
 }
