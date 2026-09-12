@@ -3215,6 +3215,8 @@
   "pages.reports.residentsWithApp": "Жителей в приложении",
   "pages.reports.summary": "Сводка",
   "pages.reports.ticketFeedbackCount": "Количество оценок:",
+  "pages.resident.dashboard.comingSoon": "Заявки, показания счётчиков и документы появятся здесь в ближайшее время.",
+  "pages.resident.dashboard.title": "Добро пожаловать",
   "pages.ticket.autoAssignment.button.cancel.label": "Отменить",
   "pages.ticket.autoAssignment.button.create.label": "Создать",
   "pages.ticket.autoAssignment.button.delete.label": "Удалить",

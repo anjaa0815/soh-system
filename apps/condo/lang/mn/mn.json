@@ -3215,6 +3215,8 @@
   "pages.reports.residentsWithApp": "Апп-тай оршин суугч",
   "pages.reports.summary": "Товч мэдээлэл",
   "pages.reports.ticketFeedbackCount": "Нийт санал хүсэлт:",
+  "pages.resident.dashboard.comingSoon": "Хүсэлт (ticket), тоолуурын заалт, баримт бичиг харах боломж энд тун удахгүй нэмэгдэнэ.",
+  "pages.resident.dashboard.title": "Тавтай морил",
   "pages.ticket.autoAssignment.button.cancel.label": "Цуцлах",
   "pages.ticket.autoAssignment.button.create.label": "Үүсгэх",
   "pages.ticket.autoAssignment.button.delete.label": "Устгах",

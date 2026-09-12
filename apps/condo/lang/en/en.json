@@ -3215,6 +3215,8 @@
   "pages.reports.residentsWithApp": "Residents in app",
   "pages.reports.summary": "Summary",
   "pages.reports.ticketFeedbackCount": "Total feedbacks:",
+  "pages.resident.dashboard.comingSoon": "Tickets, meter readings and documents are coming here soon.",
+  "pages.resident.dashboard.title": "Welcome",
   "pages.ticket.autoAssignment.button.cancel.label": "Cancel",
   "pages.ticket.autoAssignment.button.create.label": "Create",
   "pages.ticket.autoAssignment.button.delete.label": "Delete",

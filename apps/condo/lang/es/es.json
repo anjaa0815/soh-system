@@ -3213,6 +3213,8 @@
   "pages.reports.residentsWithApp": "Vecinos en aplicación",
   "pages.reports.summary": "Resumen",
   "pages.reports.ticketFeedbackCount": "Número de evaluaciones:",
+  "pages.resident.dashboard.comingSoon": "Las incidencias, lecturas de contadores y documentos estarán disponibles aquí próximamente.",
+  "pages.resident.dashboard.title": "Bienvenido",
   "pages.ticket.autoAssignment.button.cancel.label": "Cancelar",
   "pages.ticket.autoAssignment.button.create.label": "Crear",
   "pages.ticket.autoAssignment.button.delete.label": "Eliminar",
