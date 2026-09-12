@@ -32,6 +32,17 @@ const { AbstractSearchProvider } = require('./AbstractSearchProvider')
  *   the unrelated level3 container, not the building being searched for - it must be matched by
  *   name instead, see `get()`.
  *
+ * IMPORTANT, empirically confirmed limitation: `search` only ever matched khoroolol/district-level
+ * (level3) names in testing - full and partial building names ("Эрдэнэсийн арал хотхон",
+ * "Эрдэнэсийн арал") returned zero results, while khoroolol names ("28-р хороолол", "хороолол")
+ * matched reliably. So as a text-search provider this can basically only resolve the general
+ * area/khoroolol a query mentions (with real coordinates, via `getByZipCode`'s level3 record),
+ * never a specific building by name - level4 records only ever show up as entries *inside* a
+ * `getByZipCode` response, not as `search` hits. Callers relying on this for a resident to type
+ * their building/khotkhon name and get a house-level match will get no results; that's expected,
+ * not a bug, and is exactly why this is meant to sit in a fallback chain (e.g.
+ * `PROVIDER=zipcode_mn,google`) rather than be used alone.
+ *
  * @see https://zipcode.mn/zipcodemap - the map widget this was reverse-engineered from
  */
 
