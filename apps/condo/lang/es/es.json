@@ -955,6 +955,7 @@
   "document.category.SpringInspections.name": "Actas de Inspección de Primavera",
   "document.category.TechnicalDocumentation.name": "Documentación Técnica",
   "document.category.WorkPlans.name": "Planes de trabajo",
+  "documents.canReadByResident.message": "Mostrar este documento a los residentes en la aplicación móvil",
   "documents.propertyDocuments.addDocument": "Añadir documento",
   "documents.propertyDocuments.columns.category": "Categoría",
   "documents.propertyDocuments.columns.date": "Fecha de carga",

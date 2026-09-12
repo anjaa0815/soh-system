@@ -955,6 +955,7 @@
   "document.category.SpringInspections.name": "Spring Inspection Acts",
   "document.category.TechnicalDocumentation.name": "Technical Documentation",
   "document.category.WorkPlans.name": "Work Plans",
+  "documents.canReadByResident.message": "Show this document to residents in the mobile app",
   "documents.propertyDocuments.addDocument": "Add Document",
   "documents.propertyDocuments.columns.category": "Category",
   "documents.propertyDocuments.columns.date": "Upload Date",

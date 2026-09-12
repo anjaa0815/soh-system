@@ -955,6 +955,7 @@
   "document.category.SpringInspections.name": "Акты весенних осмотров",
   "document.category.TechnicalDocumentation.name": "Техническая документация",
   "document.category.WorkPlans.name": "Планы работ",
+  "documents.canReadByResident.message": "Показывать этот документ жителям в мобильном приложении",
   "documents.propertyDocuments.addDocument": "Добавить документ",
   "documents.propertyDocuments.columns.category": "Категория",
   "documents.propertyDocuments.columns.date": "Дата загрузки",

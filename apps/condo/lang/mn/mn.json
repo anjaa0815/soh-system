@@ -955,6 +955,7 @@
   "document.category.SpringInspections.name": "Хаврын үзлэгийн актууд",
   "document.category.TechnicalDocumentation.name": "Техникийн баримт бичиг",
   "document.category.WorkPlans.name": "Ажлын төлөвлөгөө",
+  "documents.canReadByResident.message": "Энэ баримт бичгийг оршин суугчийн мобайл апп-д харуулах",
   "documents.propertyDocuments.addDocument": "Баримт бичиг нэмэх",
   "documents.propertyDocuments.columns.category": "Ангилал",
   "documents.propertyDocuments.columns.date": "Байршуулсан огноо",
