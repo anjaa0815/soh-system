@@ -1,17 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 /* eslint-disable @typescript-eslint/no-var-requires */
+const { getKVClient } = require('@open-condo/keystone/kv')
 const { getLogger } = require('@open-condo/keystone/logging')
 const { getById, find, getSchemaCtx } = require('@open-condo/keystone/schema')
 
 const { PAYMENT_DONE_STATUS } = require('@condo/domains/acquiring/constants/payment')
 const { getProviderBySlug } = require('@condo/domains/acquiring/integrations/providers')
 const { Payment } = require('@condo/domains/acquiring/utils/serverSchema')
+const { getAcquiringExternalIdKey } = require('@condo/domains/acquiring/utils/serverSchema/acquiringExternalId')
 const { BillingReceipt, getNewPaymentsSum } = require('@condo/domains/billing/utils/serverSchema')
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 const logger = getLogger('acquiringWebhookHandler')
 const sender = { dv: 1, fingerprint: 'acquiring-webhook-handler' }
+const kv = getKVClient('acquiring-external-id')
 
 /**
  * Receives payment-completion callbacks from whichever acquiring provider an organization has
@@ -72,7 +75,15 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
 
         let isPaid = false
         if (typeof provider.checkPaymentStatus === 'function') {
-            const status = await provider.checkPaymentStatus(acquiringContext.settings, paymentGroupId)
+            const externalId = await kv.get(getAcquiringExternalIdKey(paymentGroupId))
+            if (!externalId) {
+                // Can't verify without the provider's own id (e.g. the Redis key expired or was
+                // never set) - safer to leave the payment as pending than to guess wrong.
+                logger.warn({ msg: 'no stored externalId for multiPayment, cannot verify with provider yet', data: { paymentGroupId } })
+                res.status(200).json({ ok: true })
+                return
+            }
+            const status = await provider.checkPaymentStatus(acquiringContext.settings, externalId)
             isPaid = Boolean(status && status.isPaid)
         } else {
             const verified = provider.verifyWebhookSignature(req)

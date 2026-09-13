@@ -1,11 +1,15 @@
 /**
  * QPay adapter.
  *
- * NOTE: field names and endpoint shapes below follow QPay's publicly documented
- * Merchant API v2 (https://developer.qpay.mn) as commonly described, but have NOT been
- * verified against a live QPay merchant account from this codebase. Before accepting
- * real payments, confirm every endpoint/field name against the current QPay docs and
- * a real merchant sandbox.
+ * NOTE: field names and endpoint shapes below follow QPay's publicly documented Merchant API v2
+ * (https://developer.qpay.mn - itself unreachable from this environment's network policy) and
+ * have been cross-checked against two independent open-source SDKs (a Dart client on pub.dev and
+ * a Go client, codify-mn/qpay-sdk) that both agree on: `invoice_code`/`sender_invoice_no`/
+ * `invoice_receiver_code`/`invoice_description`/`callback_url` for invoice creation, `qr_text`/
+ * `qr_image`/`urls` for its response, and `object_type`/`object_id` for the payment-check request.
+ * Still NOT verified against a live QPay merchant account from this codebase - confirm before
+ * accepting real payments, especially anything not covered above (webhook payload shape,
+ * `payment_status` values beyond "PAID", error responses).
  */
 
 const QPAY_BASE_URL = 'https://merchant.qpay.mn/v2'
@@ -81,14 +85,15 @@ async function createPayment (settings, { amount, description, orderId, callback
  * integration pattern is to re-check payment status server-to-server after receiving
  * a callback, rather than trust the callback body/signature directly.
  *
- * `orderId` here is OUR OWN id (the same `sender_invoice_no` passed to createPayment,
- * in practice the MultiPayment id) rather than QPay's own `invoice_id` - we never
- * persist QPay's invoice_id anywhere, so there is nothing else to check by. This
- * assumes QPay's check endpoint accepts `object_id` as our sender_invoice_no; that is
- * NOT confirmed against real docs (same caveat as the rest of this file) - verify
- * before production use, and switch to a stored invoice_id if it turns out required.
+ * `externalId` must be QPay's OWN invoice id (the `invoice_id` returned by createPayment,
+ * i.e. this function's `externalId` return value) - both reference SDKs check status by
+ * that id (e.g. the Dart SDK's example calls `objectId: invoice.invoiceId`), not by the
+ * merchant's own sender_invoice_no. The caller (the acquiring webhook handler) is
+ * responsible for having stored and looked this up - see
+ * domains/acquiring/utils/serverSchema/acquiringExternalId.js for why that's Redis and
+ * not a schema field.
  */
-async function checkPaymentStatus (settings, orderId) {
+async function checkPaymentStatus (settings, externalId) {
     const accessToken = await getAccessToken(settings)
 
     const res = await fetch(`${QPAY_BASE_URL}/payment/check`, {
@@ -99,7 +104,7 @@ async function checkPaymentStatus (settings, orderId) {
         },
         body: JSON.stringify({
             object_type: 'INVOICE',
-            object_id: orderId,
+            object_id: externalId,
         }),
     })
 

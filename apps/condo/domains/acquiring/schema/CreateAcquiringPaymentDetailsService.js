@@ -4,12 +4,16 @@
 
 const conf = require('@open-condo/config')
 const { GQLError, GQLErrorCode: { BAD_USER_INPUT, INTERNAL_ERROR } } = require('@open-condo/keystone/errors')
+const { getKVClient } = require('@open-condo/keystone/kv')
 const { checkDvAndSender } = require('@open-condo/keystone/plugins/dvAndSender')
 const { GQLCustomSchema, getById, find } = require('@open-condo/keystone/schema')
 
 const access = require('@condo/domains/acquiring/access/CreateAcquiringPaymentDetailsService')
 const { getProviderByIntegrationName } = require('@condo/domains/acquiring/integrations/providers')
+const { getAcquiringExternalIdKey, EXTERNAL_ID_TTL_SECONDS } = require('@condo/domains/acquiring/utils/serverSchema/acquiringExternalId')
 const { DV_VERSION_MISMATCH, WRONG_FORMAT, NOT_FOUND } = require('@condo/domains/common/constants/errors')
+
+const kv = getKVClient('acquiring-external-id')
 
 /**
  * List of possible errors, that this custom schema can throw
@@ -109,6 +113,12 @@ const CreateAcquiringPaymentDetailsService = new GQLCustomSchema('CreateAcquirin
                         ...ERRORS.PROVIDER_CALL_FAILED,
                         messageInterpolation: { error: error.message },
                     }, context)
+                }
+
+                if (paymentDetails.externalId) {
+                    // Needed later by the webhook handler to check status with the provider - see
+                    // the module doc in utils/serverSchema/acquiringExternalId.js for why Redis.
+                    await kv.set(getAcquiringExternalIdKey(multiPaymentId), String(paymentDetails.externalId), 'EX', EXTERNAL_ID_TTL_SECONDS)
                 }
 
                 return {
