@@ -22,9 +22,14 @@ import {
     PARKING_UNIT_TYPE,
     WAREHOUSE_UNIT_TYPE,
 } from '@condo/domains/property/constants/common'
-import { ADDRESS_NOT_FOUND_ERROR, ALREADY_REGISTERED_ERROR } from '@condo/domains/resident/constants/errors'
 import ResidentLayout from '@condo/domains/user/components/containers/ResidentLayout'
 
+
+// NOTE: not imported from @condo/domains/resident/constants/errors - that module pulls in
+// @open-condo/keystone/errors (a server-only, `fs`-dependent module), which breaks the client
+// bundle for this page. These must stay in sync with that file's values.
+const ADDRESS_NOT_FOUND_ERROR = 'ADDRESS_NOT_FOUND'
+const ALREADY_REGISTERED_ERROR = 'ALREADY_REGISTERED'
 
 const REGISTER_RESIDENT_MUTATION = gql`
     mutation registerMyResident ($data: RegisterResidentInput!) {
