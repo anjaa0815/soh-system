@@ -1,7 +1,7 @@
 import { gql, useMutation, useQuery } from '@apollo/client'
 import { Card, Col, Row } from 'antd'
 import get from 'lodash/get'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getClientSideSenderInfo } from '@open-condo/miniapp-utils/helpers/sender'
 import { useIntl } from '@open-condo/next/intl'
@@ -14,6 +14,7 @@ const GET_MY_SERVICE_CONSUMERS_QUERY = gql`
             id
             accountNumber
             organization { id }
+            resident { unitType unitName }
         }
     }
 `
@@ -53,12 +54,28 @@ type ServiceConsumer = {
     id: string
     accountNumber: string
     organization: { id: string }
+    resident: { unitType: string | null, unitName: string | null } | null
 }
 
-const ServiceConsumerBills: React.FC<{ serviceConsumer: ServiceConsumer }> = ({ serviceConsumer }) => {
+const UNIT_TYPE_ICONS: Record<string, string> = {
+    flat: '🏠',
+    apartment: '🏠',
+    parking: '🅿️',
+    commercial: '🏪',
+    warehouse: '📦',
+}
+
+type OnTotalsChange = (consumerId: string, unitType: string | null, totalUnpaid: number) => void
+
+const ServiceConsumerBills: React.FC<{ serviceConsumer: ServiceConsumer, onTotalsChange: OnTotalsChange }> = ({ serviceConsumer, onTotalsChange }) => {
     const intl = useIntl()
     const PayMessage = intl.formatMessage({ id: 'pages.resident.bills.payButton' })
     const PeriodMessage = intl.formatMessage({ id: 'pages.resident.bills.period' })
+
+    const unitType = get(serviceConsumer, ['resident', 'unitType'])
+    const unitName = get(serviceConsumer, ['resident', 'unitName'])
+    const unitTypeMessage = unitType ? intl.formatMessage({ id: `pages.resident.bills.unitType.${unitType}` }) : null
+    const unitIcon = unitType ? UNIT_TYPE_ICONS[unitType] : null
 
     const [payingReceiptId, setPayingReceiptId] = useState<string | null>(null)
 
@@ -75,6 +92,15 @@ const ServiceConsumerBills: React.FC<{ serviceConsumer: ServiceConsumer }> = ({ 
         const paid = Number(receipt.paid || 0)
         return toPay - paid > 0
     }), [receipts])
+    const totalUnpaid = useMemo(() => unpaidReceipts.reduce((sum, receipt) => {
+        return sum + (Number(receipt.toPay || 0) - Number(receipt.paid || 0))
+    }, 0), [unpaidReceipts])
+
+    useEffect(() => {
+        if (loading) return
+        onTotalsChange(serviceConsumer.id, unitType || null, totalUnpaid)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, totalUnpaid, unitType, serviceConsumer.id])
 
     const handlePay = useCallback(async (receipt: BillingReceipt) => {
         setPayingReceiptId(receipt.id)
@@ -109,6 +135,15 @@ const ServiceConsumerBills: React.FC<{ serviceConsumer: ServiceConsumer }> = ({ 
     return (
         <>
             {
+                unitTypeMessage && (
+                    <Col span={24}>
+                        <Typography.Text type='secondary' size='medium'>
+                            {unitIcon} {unitTypeMessage}{unitName ? ` · ${unitName}` : ''}
+                        </Typography.Text>
+                    </Col>
+                )
+            }
+            {
                 unpaidReceipts.map((receipt) => (
                     <Col span={24} key={receipt.id}>
                         <Card>
@@ -136,13 +171,33 @@ const ServiceConsumerBills: React.FC<{ serviceConsumer: ServiceConsumer }> = ({ 
     )
 }
 
+type ConsumerTotal = { unitType: string | null, total: number }
+
 export const ResidentBillsList: React.FC = () => {
     const intl = useIntl()
     const TitleMessage = intl.formatMessage({ id: 'pages.resident.bills.title' })
     const EmptyMessage = intl.formatMessage({ id: 'pages.resident.bills.empty' })
+    const TotalMessage = intl.formatMessage({ id: 'pages.resident.bills.summary.total' })
 
     const { data, loading } = useQuery(GET_MY_SERVICE_CONSUMERS_QUERY, { fetchPolicy: 'network-only', errorPolicy: 'all' })
     const serviceConsumers: ServiceConsumer[] = get(data, 'serviceConsumers', [])
+
+    const [totalsByConsumer, setTotalsByConsumer] = useState<Record<string, ConsumerTotal>>({})
+    const handleTotalsChange = useCallback<OnTotalsChange>((consumerId, unitType, total) => {
+        setTotalsByConsumer((prev) => ({ ...prev, [consumerId]: { unitType, total } }))
+    }, [])
+
+    const totalsByUnitType = useMemo(() => {
+        const totals: Record<string, number> = {}
+        let grandTotal = 0
+        for (const { unitType, total } of Object.values(totalsByConsumer)) {
+            if (total <= 0) continue
+            grandTotal += total
+            const key = unitType || 'other'
+            totals[key] = (totals[key] || 0) + total
+        }
+        return { byType: totals, grandTotal }
+    }, [totalsByConsumer])
 
     if (loading) return null
 
@@ -159,8 +214,38 @@ export const ResidentBillsList: React.FC = () => {
                 )
             }
             {
+                totalsByUnitType.grandTotal > 0 && (
+                    <Col span={24}>
+                        <Row justify='space-between' align='middle' gutter={[16, 4]}>
+                            <Col>
+                                <Typography.Text strong>
+                                    {TotalMessage}: {totalsByUnitType.grandTotal.toLocaleString()} ₮
+                                </Typography.Text>
+                            </Col>
+                            {
+                                Object.entries(totalsByUnitType.byType).length > 1 && (
+                                    <Col>
+                                        <Typography.Text type='secondary' size='small'>
+                                            {
+                                                Object.entries(totalsByUnitType.byType).map(([unitType, total]) => {
+                                                    const label = unitType === 'other'
+                                                        ? null
+                                                        : intl.formatMessage({ id: `pages.resident.bills.unitType.${unitType}` })
+                                                    const icon = UNIT_TYPE_ICONS[unitType] || ''
+                                                    return `${icon} ${label || ''}: ${total.toLocaleString()} ₮`
+                                                }).join('   ')
+                                            }
+                                        </Typography.Text>
+                                    </Col>
+                                )
+                            }
+                        </Row>
+                    </Col>
+                )
+            }
+            {
                 serviceConsumers.map((serviceConsumer) => (
-                    <ServiceConsumerBills key={serviceConsumer.id} serviceConsumer={serviceConsumer} />
+                    <ServiceConsumerBills key={serviceConsumer.id} serviceConsumer={serviceConsumer} onTotalsChange={handleTotalsChange} />
                 ))
             }
         </Row>
