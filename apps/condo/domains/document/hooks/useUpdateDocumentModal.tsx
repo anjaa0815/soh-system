@@ -6,7 +6,7 @@ import { CSSProperties, useCallback, useMemo, useState } from 'react'
 
 import { Download, Paperclip } from '@open-condo/icons'
 import { useIntl } from '@open-condo/next/intl'
-import { Button, Modal, Typography, Space } from '@open-condo/ui'
+import { Button, Checkbox, Modal, Typography, Space } from '@open-condo/ui'
 import { colors } from '@open-condo/ui/colors'
 
 import { FormWithAction } from '@condo/domains/common/components/containers/FormList'
@@ -27,6 +27,7 @@ const UpdateDocumentModal = ({ selectedDocument, setSelectedDocument, refetchDoc
     const CancelModalTitle = intl.formatMessage({ id: 'documents.updateDocumentModal.cancel.title' })
     const CancelModalMessage = intl.formatMessage({ id: 'documents.updateDocumentModal.cancel.message' })
     const ReadyMessage = intl.formatMessage({ id: 'Ready' })
+    const CanReadByResidentMessage = intl.formatMessage({ id: 'documents.canReadByResident.message' })
 
     const updateAction = Document.useUpdate({})
     const softDeleteAction = Document.useSoftDelete()
@@ -68,6 +69,7 @@ const UpdateDocumentModal = ({ selectedDocument, setSelectedDocument, refetchDoc
 
         await updateAction({
             category: { connect: { id: values.category } },
+            canReadByResident: Boolean(values.canReadByResident),
         }, selectedDocument)
 
         await refetchDocuments()
@@ -145,6 +147,19 @@ const UpdateDocumentModal = ({ selectedDocument, setSelectedDocument, refetchDoc
                             <DocumentCategoryFormItem
                                 initialValue={get(selectedDocument, 'category.id')}
                             />
+                        </Col>
+                        <Col span={24}>
+                            <Form.Item
+                                name='canReadByResident'
+                                valuePropName='checked'
+                                initialValue={get(selectedDocument, 'canReadByResident', false)}
+                            >
+                                <Checkbox id='document-can-read-by-resident'>
+                                    <Typography.Text>
+                                        {CanReadByResidentMessage}
+                                    </Typography.Text>
+                                </Checkbox>
+                            </Form.Item>
                         </Col>
                     </Row>
                 </Modal>

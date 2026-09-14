@@ -10,6 +10,14 @@ const LogoWrapper = styled.span`
   height: 32px;
 `
 
+const LogoWordmark = styled.span`
+  margin-left: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 25px;
+  color: #222;
+`
+
 const SunKeyFrames = keyframes`
   from {
     transform: translate(-15px, -12px);
@@ -57,7 +65,7 @@ export const Logo: React.FC<ILogoProps> = (props) => {
     return (
         <LogoWrapper onClick={onClick} className='logo'>
             <Image preview={false} css={SunCSS} src='/logoSun.svg'/>
-            <Image preview={false} src='/logoDoma.svg'/>
+            <LogoWordmark>Хөтөч</LogoWordmark>
         </LogoWrapper>
     )
 }

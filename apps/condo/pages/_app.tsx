@@ -66,6 +66,7 @@ import {
     MARKET_CATEGORY,
     BILLING_CATEGORY,
     METERS_CATEGORY,
+    DOCUMENTS_CATEGORY,
     MINIAPPS_CATEGORY,
     SETTINGS_CATEGORY,
 } from '@condo/domains/common/constants/menuCategories'
@@ -207,6 +208,7 @@ const MenuItems: React.FC = () => {
     const hasAccessToContacts = role?.canReadContacts || false
     const hasAccessToAnalytics = role?.canReadAnalytics
     const hasAccessToMeters = role?.canReadMeters || false
+    const hasAccessToDocuments = role?.canReadDocuments || false
     const hasAccessToServices = role?.canReadServices || false
     const hasAccessToSettings = role?.canReadSettings || false
     const hasAccessToMarketplace = role?.canReadMarketItems || role?.canReadInvoices || role?.canReadPaymentsWithInvoices || false
@@ -353,6 +355,18 @@ const MenuItems: React.FC = () => {
             ].filter(checkItemAccess),
         },
         {
+            key: DOCUMENTS_CATEGORY,
+            items: [
+                {
+                    id: 'menu-item-documents',
+                    path: 'documents',
+                    icon: AllIcons['FileText'],
+                    label: 'global.section.documents',
+                    access: hasAccessToDocuments && isManagingCompany,
+                },
+            ].filter(checkItemAccess),
+        },
+        {
             key: MINIAPPS_CATEGORY,
             items: [
                 {
@@ -379,7 +393,7 @@ const MenuItems: React.FC = () => {
                 },
             ].filter(checkItemAccess),
         },
-    ]), [hasAccessToTour, isManagingCompany, hasAccessToAnalytics, hasAccessToTickets, hasAccessToIncidents, hasAccessToNewsItems, hasAccessToProperties, hasAccessToContacts, hasAccessToEmployees, hasAccessToMarketplace, isNoServiceProviderOrganization, shouldShowCombinedBilling, hasAccessToBilling, isSPPOrg, anyReceiptsLoaded, sppBillingId, hasAccessToMeters, hasAccessToServices, connectedAppsIds, hasAccessToSettings])
+    ]), [hasAccessToTour, isManagingCompany, hasAccessToAnalytics, hasAccessToTickets, hasAccessToIncidents, hasAccessToNewsItems, hasAccessToProperties, hasAccessToContacts, hasAccessToEmployees, hasAccessToMarketplace, isNoServiceProviderOrganization, shouldShowCombinedBilling, hasAccessToBilling, isSPPOrg, anyReceiptsLoaded, sppBillingId, hasAccessToMeters, hasAccessToDocuments, hasAccessToServices, connectedAppsIds, hasAccessToSettings])
 
     return (
         <div>
