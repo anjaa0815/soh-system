@@ -20,6 +20,7 @@ import { PageComponentType } from '@condo/domains/common/types'
 import { isSafeUrl } from '@condo/domains/common/utils/url.utils'
 import { InfoBlock } from '@condo/domains/user/components/auth/InfoBlock'
 import { RegisterContextProvider, useRegisterContext } from '@condo/domains/user/components/auth/RegisterContextProvider'
+import { TelegramLoginButton } from '@condo/domains/user/components/auth/TelegramLoginButton'
 import { ValidateIdentifierForm } from '@condo/domains/user/components/auth/ValidateIdentifierForm'
 import AuthLayout from '@condo/domains/user/components/containers/AuthLayout'
 import { ResponsiveCol } from '@condo/domains/user/components/containers/ResponsiveCol'
@@ -31,6 +32,8 @@ import { AUTH_FLOW_USER_TYPE_COOKIE_NAME } from '@condo/domains/user/constants/a
 const {
     publicRuntimeConfig: {
         residentAppInfo,
+        telegramResidentBotName,
+        serverUrl,
     },
 } = getConfig()
 
@@ -120,6 +123,19 @@ const ResidentAuthForm: React.FC = () => {
                                         <Col span={24}>
                                             <ResidentPhoneStep onFinish={goToCodeStep} />
                                         </Col>
+                                        {
+                                            telegramResidentBotName && (
+                                                <Col span={24}>
+                                                    <Row justify='center'>
+                                                        <TelegramLoginButton
+                                                            botName={telegramResidentBotName}
+                                                            userType='resident'
+                                                            redirectUrl={`${serverUrl}${redirectUrl}`}
+                                                        />
+                                                    </Row>
+                                                </Col>
+                                            )
+                                        }
                                     </Row>
                                 </Col>
                             ) : (
