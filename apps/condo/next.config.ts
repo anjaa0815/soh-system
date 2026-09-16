@@ -69,6 +69,7 @@ const identificationStaffUserRequiredFields = identificationUserRequiredFields?.
 const inviteRequiredFields = conf['INVITE_REQUIRED_FIELDS'] ? JSON.parse(conf['INVITE_REQUIRED_FIELDS']) : identificationStaffUserRequiredFields
 const footerConfig = JSON.parse(conf['FOOTER_CONFIG'] || '{}')
 const defaultStaffAuthMethods = conf['DEFAULT_STAFF_AUTH_METHODS'] ? JSON.parse(conf['DEFAULT_STAFF_AUTH_METHODS']) : []
+const residentAuthMethods = conf['RESIDENT_AUTH_METHODS'] ? JSON.parse(conf['RESIDENT_AUTH_METHODS']) : []
 const verifyUserEmailWithMarketingConsentEnabled = conf['VERIFY_USER_EMAIL_WITH_MARKETING_CONSENT_ENABLED'] === 'true'
 const fileClientId = conf['FILE_CLIENT_ID']
 const RUNTIME_TRANSLATIONS = JSON.parse(conf['RUNTIME_TRANSLATIONS'] || '{}')
@@ -157,6 +158,7 @@ const nextConfig: NextConfig = {
         inviteRequiredFields,
         footerConfig,
         defaultStaffAuthMethods,
+        residentAuthMethods,
         verifyUserEmailWithMarketingConsentEnabled,
         fileClientId,
         runtimeTranslations: RUNTIME_TRANSLATIONS,

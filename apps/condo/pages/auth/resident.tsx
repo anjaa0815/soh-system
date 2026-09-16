@@ -24,9 +24,10 @@ import { TelegramLoginButton } from '@condo/domains/user/components/auth/Telegra
 import { ValidateIdentifierForm } from '@condo/domains/user/components/auth/ValidateIdentifierForm'
 import AuthLayout from '@condo/domains/user/components/containers/AuthLayout'
 import { ResponsiveCol } from '@condo/domains/user/components/containers/ResponsiveCol'
-import { ResidentPhoneStep } from '@condo/domains/user/components/resident/ResidentPhoneStep'
+import { ResidentIdentifierStep } from '@condo/domains/user/components/resident/ResidentIdentifierStep'
 import { WelcomeHeaderTitle } from '@condo/domains/user/components/UserWelcomeTitle'
 import { AUTH_FLOW_USER_TYPE_COOKIE_NAME } from '@condo/domains/user/constants/auth'
+import { normalizeUserIdentifier } from '@condo/domains/user/utils/helpers'
 
 
 const {
@@ -71,6 +72,8 @@ const ResidentAuthForm: React.FC = () => {
         try {
             const sender = getClientSideSenderInfo()
             const captcha = await executeCaptcha()
+            const { type: identifierType, normalizedValue } = normalizeUserIdentifier(identifier)
+            const userData = identifierType === 'email' ? { email: normalizedValue } : { phone: normalizedValue }
 
             const res = await authenticateOrRegisterUserWithToken({
                 variables: {
@@ -80,7 +83,7 @@ const ResidentAuthForm: React.FC = () => {
                         captcha,
                         token,
                         userType: UserTypeType.Resident,
-                        userData: { phone: identifier },
+                        userData,
                     },
                 },
             })
@@ -121,7 +124,7 @@ const ResidentAuthForm: React.FC = () => {
                                             </Typography.Text>
                                         </Col>
                                         <Col span={24}>
-                                            <ResidentPhoneStep onFinish={goToCodeStep} />
+                                            <ResidentIdentifierStep onFinish={goToCodeStep} />
                                         </Col>
                                         {
                                             telegramResidentBotName && (
