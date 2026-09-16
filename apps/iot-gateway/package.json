@@ -1,0 +1,22 @@
+{
+  "name": "@app/iot-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bridges building hardware (MQTT sensors, ONVIF cameras, RS-485/Modbus meters) into the condo platform over its GraphQL API, authenticated as a B2BApp service user.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "demo": "node demo/run-mqtt-demo.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "graphql-request": "^7.4.0",
+    "modbus-serial": "^8.0.25",
+    "mqtt": "^5.15.2",
+    "onvif": "^0.8.3",
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "aedes": "^1.1.2"
+  }
+}
