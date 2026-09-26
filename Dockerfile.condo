@@ -21,7 +21,10 @@ FROM base AS builder
 WORKDIR /app
 
 COPY . .
-RUN yarn install --immutable
+# NOTE: not --immutable — this fork's yarn.lock isn't perfectly in sync with
+# package.json (inherited from upstream), and a plain install (as already
+# verified working on the target server) resolves it without issue.
+RUN yarn install
 
 RUN echo "# Build-time .env config, discarded before the runtime image" > apps/condo/.env \
     && echo "COOKIE_SECRET=undefined" >> apps/condo/.env \
