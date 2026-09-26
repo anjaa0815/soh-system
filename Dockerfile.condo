@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1.7
+#
+# Builds a production image for @app/condo only. Unlike the root Dockerfile
+# (which expects a pre-pruned "./out" produced by the werf/doma.ai pipeline),
+# this builds directly from a full checkout so it can run as a plain
+# `docker build` step in GitHub Actions, on a runner with enough RAM to
+# survive the monorepo's webpack/tsup builds.
+FROM node:24-bookworm-slim AS base
+
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable \
+    && python3 -m pip install --break-system-packages --no-cache-dir 'psycopg2-binary==2.9.10' 'Django==5.2'
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+FROM base AS builder
+WORKDIR /app
+
+COPY . .
+RUN yarn install --immutable
+
+RUN echo "# Build-time .env config, discarded before the runtime image" > apps/condo/.env \
+    && echo "COOKIE_SECRET=undefined" >> apps/condo/.env \
+    && echo "DATABASE_URL=undefined" >> apps/condo/.env \
+    && echo "REDIS_URL=undefined" >> apps/condo/.env \
+    && echo "NODE_ENV=production" >> apps/condo/.env \
+    && echo "FILE_FIELD_ADAPTER=local" >> apps/condo/.env
+
+RUN yarn workspace @app/condo build:deps \
+    && yarn workspace @app/condo build \
+    && rm -f apps/condo/.env \
+    && rm -rf /app/.config /app/.cache
+
+FROM base AS runner
+WORKDIR /app
+
+COPY --from=builder /app /app
+
+WORKDIR /app/apps/condo
+EXPOSE 3000
+
+CMD ["yarn", "start"]
