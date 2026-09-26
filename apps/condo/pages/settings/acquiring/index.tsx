@@ -8,15 +8,14 @@ import { useIntl } from '@open-condo/next/intl'
 import { useOrganization } from '@open-condo/next/organization'
 import { Button, Input, Typography } from '@open-condo/ui'
 
+import { CONTEXT_FINISHED_STATUS } from '@condo/domains/acquiring/constants/context'
+import { getProviderBySlug, PROVIDERS } from '@condo/domains/acquiring/integrations/providers'
+import { AcquiringIntegration, AcquiringIntegrationContext } from '@condo/domains/acquiring/utils/clientSchema'
 import { PageContent, PageWrapper } from '@condo/domains/common/components/containers/BaseLayout'
 import { FormItem } from '@condo/domains/common/components/Form/FormItem'
 import { Loader } from '@condo/domains/common/components/Loader'
 import { PageComponentType } from '@condo/domains/common/types'
 import { PermissionsRequired } from '@condo/domains/organization/components/OrganizationRequired'
-
-import { getProviderBySlug, PROVIDERS } from '@condo/domains/acquiring/integrations/providers'
-import { CONTEXT_FINISHED_STATUS } from '@condo/domains/acquiring/constants/context'
-import { AcquiringIntegration, AcquiringIntegrationContext } from '@condo/domains/acquiring/utils/clientSchema'
 
 
 const AcquiringSettingsPageAccessRequired: React.FC<React.PropsWithChildren> = ({ children }) => (

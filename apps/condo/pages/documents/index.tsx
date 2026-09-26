@@ -10,8 +10,8 @@ import { TablePageContent } from '@condo/domains/common/components/containers/Ba
 import { Loader } from '@condo/domains/common/components/Loader'
 import { useGlobalHints } from '@condo/domains/common/hooks/useGlobalHints'
 import { PageComponentType } from '@condo/domains/common/types'
-import { DocumentsReadPermissionRequired } from '@condo/domains/document/components/PageAccess'
 import { OrganizationDocuments } from '@condo/domains/document/components/OrganizationDocuments'
+import { DocumentsReadPermissionRequired } from '@condo/domains/document/components/PageAccess'
 import { Document } from '@condo/domains/document/utils/clientSchema'
 
 
