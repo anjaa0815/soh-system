@@ -19,6 +19,9 @@ ENV NODE_ENV=production
 
 FROM base AS builder
 WORKDIR /app
+# turbo (and other workspace CLI binaries) live in the root node_modules/.bin,
+# which isn't on PATH by default when invoking a workspace script directly.
+ENV PATH="/app/node_modules/.bin:${PATH}"
 
 COPY . .
 # NOTE: not --immutable — this fork's yarn.lock isn't perfectly in sync with
