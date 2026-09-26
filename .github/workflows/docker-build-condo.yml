@@ -12,6 +12,21 @@ permissions:
   packages: write
 
 jobs:
+  # `next build` stops at the first type error; this lists all of them at once.
+  typecheck:
+    name: Typecheck condo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: yarn install
+      - run: echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: yarn workspace @app/condo build:deps
+      - run: yarn tsc --noEmit -p apps/condo/tsconfig.json
+
   build-and-push:
     name: Build and push condo image
     runs-on: ubuntu-latest

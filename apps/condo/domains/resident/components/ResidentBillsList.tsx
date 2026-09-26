@@ -74,7 +74,7 @@ const ServiceConsumerBills: React.FC<{ serviceConsumer: ServiceConsumer, onTotal
 
     const unitType = get(serviceConsumer, ['resident', 'unitType'])
     const unitName = get(serviceConsumer, ['resident', 'unitName'])
-    const unitTypeMessage = unitType ? intl.formatMessage({ id: `pages.resident.bills.unitType.${unitType}` }) : null
+    const unitTypeMessage = unitType ? intl.formatMessage({ id: `pages.resident.bills.unitType.${unitType}` as FormatjsIntl.Message['ids'] }) : null
     const unitIcon = unitType ? UNIT_TYPE_ICONS[unitType] : null
 
     const [payingReceiptId, setPayingReceiptId] = useState<string | null>(null)
@@ -230,7 +230,7 @@ export const ResidentBillsList: React.FC = () => {
                                                 Object.entries(totalsByUnitType.byType).map(([unitType, total]) => {
                                                     const label = unitType === 'other'
                                                         ? null
-                                                        : intl.formatMessage({ id: `pages.resident.bills.unitType.${unitType}` })
+                                                        : intl.formatMessage({ id: `pages.resident.bills.unitType.${unitType}` as FormatjsIntl.Message['ids'] })
                                                     const icon = UNIT_TYPE_ICONS[unitType] || ''
                                                     return `${icon} ${label || ''}: ${total.toLocaleString()} ₮`
                                                 }).join('   ')
