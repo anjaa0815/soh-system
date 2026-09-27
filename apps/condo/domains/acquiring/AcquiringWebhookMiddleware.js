@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+const express = require('express')
 
-/* eslint-disable @typescript-eslint/no-var-requires */
 const { getKVClient } = require('@open-condo/keystone/kv')
 const { getLogger } = require('@open-condo/keystone/logging')
 const { getById, find, getSchemaCtx } = require('@open-condo/keystone/schema')
@@ -10,11 +9,9 @@ const { getProviderBySlug } = require('@condo/domains/acquiring/integrations/pro
 const { Payment } = require('@condo/domains/acquiring/utils/serverSchema')
 const { getAcquiringExternalIdKey } = require('@condo/domains/acquiring/utils/serverSchema/acquiringExternalId')
 const { BillingReceipt, getNewPaymentsSum } = require('@condo/domains/billing/utils/serverSchema')
-/* eslint-enable @typescript-eslint/no-var-requires */
 
 const logger = getLogger('acquiringWebhookHandler')
 const sender = { dv: 1, fingerprint: 'acquiring-webhook-handler' }
-const kv = getKVClient('acquiring-external-id')
 
 /**
  * Receives payment-completion callbacks from whichever acquiring provider an organization has
@@ -27,28 +24,16 @@ const kv = getKVClient('acquiring-external-id')
  * The webhook BODY is never trusted for the "is it actually paid" answer: for a provider that
  * exposes a status-check endpoint (currently only QPay), that server-to-server call is the only
  * source of truth, exactly as documented in providers/qpay.js. A provider without one would need
- * its own verified webhook signature scheme before this handler could trust its payload at all -
- * none of the current adapters are far enough along for that (see providers/bonum.js, providers/byl.js).
+ * its own verified webhook signature scheme before this handler could trust its payload at all.
  *
- * Unlike a typical standalone condo acquiring integration (a separate app that reports completed
- * payments back over condo's GraphQL API), this system has no separate billing back-office to
- * resync BillingReceipt.paid afterwards - so this handler updates it directly, which is why it
- * exists as application code here rather than being left to condo's usual external-integration flow.
+ * This system has no separate billing back-office to resync BillingReceipt.paid afterwards, so
+ * this handler updates it directly.
+ *
+ * Mounted as a Keystone express middleware (not a Next API route) because it uses server-side
+ * schema utils, which must not be bundled by Next's webpack.
  */
-export default async function handler (req: NextApiRequest, res: NextApiResponse): Promise<void> {
-    if (req.method !== 'POST') {
-        res.status(405).json({ error: 'Method not allowed' })
-        return
-    }
-
-    const { slug, multiPaymentId } = req.query
-    const providerSlug = typeof slug === 'string' ? slug : null
-    const paymentGroupId = typeof multiPaymentId === 'string' ? multiPaymentId : null
-
-    if (!providerSlug || !paymentGroupId) {
-        res.status(400).json({ error: 'Missing slug/multiPaymentId in webhook URL' })
-        return
-    }
+async function handleAcquiringWebhook (req, res) {
+    const { slug: providerSlug, multiPaymentId: paymentGroupId } = req.params
 
     const provider = getProviderBySlug(providerSlug)
     if (!provider) {
@@ -68,13 +53,14 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
 
         const acquiringContext = await getById('AcquiringIntegrationContext', payment.context)
         if (!acquiringContext) {
-            logger.error({ msg: 'no AcquiringIntegrationContext for payment', data: { paymentId: payment.id } })
+            logger.error({ msg: 'no AcquiringIntegrationContext for payment', entityId: payment.id, entity: 'Payment' })
             res.status(200).json({ ok: true })
             return
         }
 
         let isPaid = false
         if (typeof provider.checkPaymentStatus === 'function') {
+            const kv = getKVClient('acquiring-external-id')
             const externalId = await kv.get(getAcquiringExternalIdKey(paymentGroupId))
             if (!externalId) {
                 // Can't verify without the provider's own id (e.g. the Redis key expired or was
@@ -120,9 +106,30 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
         }
 
         res.status(200).json({ ok: true })
-    } catch (error) {
-        logger.error({ msg: 'acquiring webhook handling failed', data: { providerSlug, paymentGroupId }, error })
+    } catch (err) {
+        logger.error({ msg: 'acquiring webhook handling failed', data: { providerSlug, paymentGroupId }, err })
         // 500 so the provider's own retry mechanism gets a chance to redeliver.
         res.status(500).json({ error: 'Internal error' })
     }
+}
+
+class AcquiringWebhookMiddleware {
+    async prepareMiddleware () {
+        // Server-to-server callback from payment providers: no cookies/session are used, so csrf does not apply
+        // nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+        const app = express()
+
+        app.post(
+            '/api/webhooks/acquiring/:slug/:multiPaymentId',
+            express.json(),
+            express.urlencoded({ extended: false }),
+            handleAcquiringWebhook,
+        )
+
+        return app
+    }
+}
+
+module.exports = {
+    AcquiringWebhookMiddleware,
 }
