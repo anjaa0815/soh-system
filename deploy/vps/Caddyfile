@@ -1,6 +1,11 @@
-# SITE_ADDRESS is the domain (e.g. "hutuch.ai"): Caddy then gets and renews a Let's Encrypt
+# SITE_ADDRESS is the domain (e.g. "hutuch.homes"): Caddy then gets and renews a Let's Encrypt
 # certificate on its own and redirects http to https. Without a domain it is ":80" (plain http).
 {$SITE_ADDRESS} {
 	encode zstd gzip
 	reverse_proxy condo:3000
+}
+
+# www.<domain> redirects to the domain (WWW_ADDRESS is set by set-domain.sh, ":8081" is an unused placeholder)
+{$WWW_ADDRESS} {
+	redir https://{$SITE_ADDRESS}{uri} permanent
 }

@@ -12,6 +12,7 @@ import { useIntl } from '@open-condo/next/intl'
 import { useOrganization } from '@open-condo/next/organization'
 import { Alert, Button, Card, Input, Select, Space, Typography } from '@open-condo/ui'
 
+import { CashPaymentsCard } from '@condo/domains/billing/components/MonthlyCharges/CashPaymentsCard'
 import { PageContent, PageWrapper } from '@condo/domains/common/components/containers/BaseLayout'
 import DatePicker from '@condo/domains/common/components/Pickers/DatePicker'
 import { PageComponentType } from '@condo/domains/common/types'
@@ -249,6 +250,14 @@ const MonthlyChargesPage: PageComponentType = () => {
                                 )}
                             </Space>
                         </Card>
+
+                        {isSaved && organizationId && (
+                            <CashPaymentsCard
+                                key={`${period.format('YYYY-MM')}-${generateResult ? generateResult.receiptsCount : 0}`}
+                                organizationId={organizationId}
+                                period={period}
+                            />
+                        )}
                     </Space>
                 </PageContent>
             </PageWrapper>
