@@ -2,6 +2,9 @@ const { faker } = require('@faker-js/faker')
 
 const { AddressFromStringParser } = require('@open-condo/clients/address-service-client/utils')
 
+// "<address> @ <lat>,<lon>": an address picked on a map (see PropertyMapPicker in condo)
+const ADDRESS_WITH_COORDINATES_REGEXP = /^(.+?)\s*@\s*(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)$/
+
 class FakeAddressServiceClient {
     addressKeysToSearchResultsMapping = new Map()
     addressSourcesToAddressKeyMapping = new Map()
@@ -27,6 +30,14 @@ class FakeAddressServiceClient {
                 unitType = ut
                 unitName = un
             }
+        }
+
+        let geoLat = null, geoLon = null
+        if (ADDRESS_WITH_COORDINATES_REGEXP.test(address)) {
+            const [, addressWithoutCoordinates, lat, lon] = ADDRESS_WITH_COORDINATES_REGEXP.exec(address)
+            address = addressWithoutCoordinates
+            geoLat = lat
+            geoLon = lon
         }
 
         if (this.addressSourcesToAddressKeyMapping.has(address)) {
@@ -133,8 +144,8 @@ class FakeAddressServiceClient {
                     tax_office: null,
                     tax_office_legal: null,
                     timezone: null,
-                    geo_lat: null,
-                    geo_lon: null,
+                    geo_lat: geoLat,
+                    geo_lon: geoLon,
                     beltway_hit: null,
                     beltway_distance: null,
                     metro: null,
