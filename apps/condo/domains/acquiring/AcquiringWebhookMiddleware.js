@@ -8,7 +8,6 @@ const { PAYMENT_DONE_STATUS } = require('@condo/domains/acquiring/constants/paym
 const { getProviderBySlug } = require('@condo/domains/acquiring/integrations/providers')
 const { Payment } = require('@condo/domains/acquiring/utils/serverSchema')
 const { getAcquiringExternalIdKey } = require('@condo/domains/acquiring/utils/serverSchema/acquiringExternalId')
-const { BillingReceipt, getNewPaymentsSum } = require('@condo/domains/billing/utils/serverSchema')
 
 const logger = getLogger('acquiringWebhookHandler')
 const sender = { dv: 1, fingerprint: 'acquiring-webhook-handler' }
@@ -93,15 +92,6 @@ async function handleAcquiringWebhook (req, res) {
                 sender,
                 status: PAYMENT_DONE_STATUS,
                 advancedAt: new Date().toISOString(),
-            })
-        }
-
-        if (payment.receipt) {
-            const paidAmount = await getNewPaymentsSum(payment.receipt)
-            await BillingReceipt.update(context, payment.receipt, {
-                dv: 1,
-                sender,
-                paid: paidAmount,
             })
         }
 

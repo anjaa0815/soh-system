@@ -60,9 +60,9 @@ const AccrualsAndPaymentsPage: PageComponentType = () => {
         refetchBilling,
     }), [acquiringContexts, billingContexts, refetchBilling])
 
-    const canShowBillingPage = isCombinedPageEnabled
-        ? hasFinishedBillingContext
-        : billingContexts.length > 0 && acquiringContexts.length > 0
+    // NOTE: receipts are shown without an acquiring context too: online payments (QPay etc.) are set up
+    // separately on /settings/acquiring, and the acquiring onboarding (SberBusiness offer) does not apply here
+    const canShowBillingPage = hasFinishedBillingContext
 
     if (acquiringLoading || billingLoading || acquiringError || billingError) {
         return (

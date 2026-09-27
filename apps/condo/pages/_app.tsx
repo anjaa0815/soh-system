@@ -330,11 +330,19 @@ const MenuItems: React.FC = () => {
                 {
                     id: 'menu-item-billing',
                     path: 'billing',
-                    icon: AllIcons['Ruble'],
+                    icon: AllIcons['Wallet'],
                     label: shouldShowCombinedBilling ? 'global.section.SPP' : 'global.section.accrualsAndPayments',
                     access: shouldShowCombinedBilling ? hasAccessToBilling : isSPPOrg
                         ? hasAccessToBilling && anyReceiptsLoaded
                         : hasAccessToBilling,
+                    excludePaths: [/^\/billing\/monthly-charges/],
+                },
+                {
+                    id: 'menu-item-monthly-charges',
+                    path: 'billing/monthly-charges',
+                    icon: AllIcons['Bill'],
+                    label: 'global.section.monthlyCharges',
+                    access: Boolean(role?.canManageIntegrations),
                 },
                 ...(!shouldShowCombinedBilling ? [{
                     id: 'menu-item-service-provider-profile',
