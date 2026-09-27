@@ -170,7 +170,7 @@ const AcquiringSettingsPage: PageComponentType = () => {
                                                     <FormItem
                                                         key={field.name}
                                                         name={field.name}
-                                                        label={intl.formatMessage({ id: field.labelId })}
+                                                        label={intl.formatMessage({ id: field.labelId as FormatjsIntl.Message['ids'] })}
                                                         rules={field.required ? [{ required: true, message: FieldIsRequiredMessage }] : []}
                                                     >
                                                         {

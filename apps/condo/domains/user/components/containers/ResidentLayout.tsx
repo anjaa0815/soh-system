@@ -53,7 +53,7 @@ const ResidentLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
                         )
                     }
                     <Col>
-                        <Button type='secondary' size='small' onClick={handleSignOut}>
+                        <Button type='secondary' size='medium' onClick={handleSignOut}>
                             {SignOutMessage}
                         </Button>
                     </Col>

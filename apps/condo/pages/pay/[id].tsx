@@ -16,6 +16,8 @@ import { prefetchAuth } from '@condo/domains/common/utils/next/auth'
 import ResidentLayout from '@condo/domains/user/components/containers/ResidentLayout'
 
 
+const CENTERED_STYLE: React.CSSProperties = { textAlign: 'center' }
+
 const CREATE_ACQUIRING_PAYMENT_DETAILS_MUTATION = gql`
     mutation createMyAcquiringPaymentDetails ($data: CreateAcquiringPaymentDetailsInput!) {
         result: createAcquiringPaymentDetails(data: $data) {
@@ -73,8 +75,8 @@ const PayPage: PageComponentType = () => {
         <>
             <Head><title>{TitleMessage}</title></Head>
             <Row justify='center' gutter={[0, 24]}>
-                <Col span={24}>
-                    <Typography.Title level={3} style={{ textAlign: 'center' }}>{TitleMessage}</Typography.Title>
+                <Col span={24} style={CENTERED_STYLE}>
+                    <Typography.Title level={3}>{TitleMessage}</Typography.Title>
                 </Col>
 
                 {
@@ -87,8 +89,8 @@ const PayPage: PageComponentType = () => {
 
                 {
                     !loading && error && (
-                        <Col span={24}>
-                            <Typography.Text type='danger' style={{ display: 'block', textAlign: 'center' }}>
+                        <Col span={24} style={CENTERED_STYLE}>
+                            <Typography.Text type='danger'>
                                 {error}
                             </Typography.Text>
                         </Col>
@@ -105,8 +107,8 @@ const PayPage: PageComponentType = () => {
                                     </Col>
                                 </Row>
                             </Col>
-                            <Col span={24}>
-                                <Typography.Text type='secondary' style={{ display: 'block', textAlign: 'center' }}>
+                            <Col span={24} style={CENTERED_STYLE}>
+                                <Typography.Text type='secondary'>
                                     {QrInfoMessage}
                                 </Typography.Text>
                             </Col>
