@@ -1,5 +1,5 @@
-# Single-VM deployment for a small (1GB RAM) Oracle Free Tier instance.
-# Setup steps: see README.md next to this file.
+# Single-VM deployment: postgres, redis and the prebuilt condo image.
+# Needs at least 4GB RAM — the app alone exceeds 640MB of heap while loading.
 name: hutoch
 
 services:
@@ -10,7 +10,6 @@ services:
       POSTGRES_USER: condo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: condo
-    # Kept small so postgres, redis and the app fit in 1GB RAM (+ swap)
     command: postgres -c shared_buffers=64MB -c max_connections=40
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -31,7 +30,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      NODE_OPTIONS: --max-old-space-size=640
+      NODE_OPTIONS: --max-old-space-size=${NODE_HEAP_MB:-2048}
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
     depends_on:
       postgres:
