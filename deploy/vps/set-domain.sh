@@ -20,7 +20,7 @@ set_env WWW_DOMAIN "www.$DOMAIN"
 set_env SERVER_URL "https://$DOMAIN"
 
 docker compose up -d
-# caddy reads the Caddyfile only on start
-docker compose restart caddy
+# compose does not notice .env changes: recreate the app (new SERVER_URL) and caddy (new domain)
+docker compose up -d --force-recreate condo caddy
 echo "Done. Open https://$DOMAIN (the certificate is issued on the first request, give it a minute)."
 echo "Certificate logs: docker compose logs -f caddy"
