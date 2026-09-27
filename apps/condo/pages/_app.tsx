@@ -10,6 +10,7 @@ import { CacheProvider } from '@emotion/react'
 import { ConfigProvider } from 'antd'
 import enUS from 'antd/lib/locale/en_US'
 import esES from 'antd/lib/locale/es_ES'
+import mnMN from 'antd/lib/locale/mn_MN'
 import ruRU from 'antd/lib/locale/ru_RU'
 import { setCookie } from 'cookies-next'
 import dayjs from 'dayjs'
@@ -149,6 +150,7 @@ const ANT_LOCALES = {
     ru: ruRU,
     en: enUS,
     es: esES,
+    mn: mnMN,
 }
 
 interface IMenuItemData {
