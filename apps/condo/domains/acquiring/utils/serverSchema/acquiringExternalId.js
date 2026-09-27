@@ -13,7 +13,16 @@ function getAcquiringExternalIdKey (multiPaymentId) {
     return `acquiring:externalId:${multiPaymentId}`
 }
 
+/**
+ * Reverse lookup for providers that post webhooks to one fixed URL (byl.mn) instead of
+ * a per-payment callback URL: provider's own id -> multiPaymentId
+ */
+function getAcquiringPaymentGroupKey (providerSlug, externalId) {
+    return `acquiring:paymentGroup:${providerSlug}:${externalId}`
+}
+
 module.exports = {
     getAcquiringExternalIdKey,
+    getAcquiringPaymentGroupKey,
     EXTERNAL_ID_TTL_SECONDS,
 }

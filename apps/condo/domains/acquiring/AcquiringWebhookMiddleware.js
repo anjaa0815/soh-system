@@ -7,7 +7,7 @@ const { getById, find, getSchemaCtx } = require('@open-condo/keystone/schema')
 const { PAYMENT_DONE_STATUS } = require('@condo/domains/acquiring/constants/payment')
 const { getProviderBySlug } = require('@condo/domains/acquiring/integrations/providers')
 const { Payment } = require('@condo/domains/acquiring/utils/serverSchema')
-const { getAcquiringExternalIdKey } = require('@condo/domains/acquiring/utils/serverSchema/acquiringExternalId')
+const { getAcquiringExternalIdKey, getAcquiringPaymentGroupKey } = require('@condo/domains/acquiring/utils/serverSchema/acquiringExternalId')
 
 const logger = getLogger('acquiringWebhookHandler')
 const sender = { dv: 1, fingerprint: 'acquiring-webhook-handler' }
@@ -103,11 +103,63 @@ async function handleAcquiringWebhook (req, res) {
     }
 }
 
+const BYL_SLUG = 'byl'
+const BYL_INVOICE_PAID_EVENT = 'invoice.paid'
+
+/**
+ * byl.mn posts all events of a project to the one endpoint registered in its dashboard, so the payment
+ * is found by the byl invoice id (stored on invoice creation). The event must carry a valid Byl-Signature
+ * made with the signing secret from the organization's settings; after that the usual handler still
+ * confirms the paid status with byl's API.
+ */
+async function handleBylWebhook (req, res) {
+    const provider = getProviderBySlug(BYL_SLUG)
+    const { type, externalId, orderId } = provider.parseWebhookEvent(req.body)
+
+    if (type !== BYL_INVOICE_PAID_EVENT || !externalId) {
+        res.status(200).json({ ok: true })
+        return
+    }
+
+    let paymentGroupId
+    try {
+        const kv = getKVClient('acquiring-external-id')
+        paymentGroupId = await kv.get(getAcquiringPaymentGroupKey(BYL_SLUG, externalId)) || orderId
+        const storedExternalId = paymentGroupId ? await kv.get(getAcquiringExternalIdKey(paymentGroupId)) : null
+        if (!paymentGroupId || storedExternalId !== String(externalId)) {
+            logger.warn({ msg: 'byl invoice is not linked to any payment, acknowledging without action', data: { externalId, orderId } })
+            res.status(200).json({ ok: true })
+            return
+        }
+
+        const payments = await find('Payment', { multiPayment: { id: paymentGroupId }, deletedAt: null })
+        const acquiringContext = payments[0] && await getById('AcquiringIntegrationContext', payments[0].context)
+        if (!acquiringContext || !provider.verifyWebhookSignature(req, acquiringContext.settings)) {
+            logger.warn({ msg: 'byl webhook signature is not valid', data: { externalId, paymentGroupId } })
+            res.status(401).json({ error: 'Invalid signature' })
+            return
+        }
+    } catch (err) {
+        logger.error({ msg: 'byl webhook handling failed', data: { externalId }, err })
+        res.status(500).json({ error: 'Internal error' })
+        return
+    }
+
+    req.params = { slug: BYL_SLUG, multiPaymentId: paymentGroupId }
+    await handleAcquiringWebhook(req, res)
+}
+
 class AcquiringWebhookMiddleware {
     async prepareMiddleware () {
         // Server-to-server callback from payment providers: no cookies/session are used, so csrf does not apply
         // nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
         const app = express()
+
+        app.post(
+            `/api/webhooks/acquiring/${BYL_SLUG}`,
+            // NOTE: the json body is parsed (and the raw one kept as req.rawBody) by the app-level parser, see prepareKeystone
+            handleBylWebhook,
+        )
 
         app.post(
             '/api/webhooks/acquiring/:slug/:multiPaymentId',

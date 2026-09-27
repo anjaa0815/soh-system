@@ -24,6 +24,7 @@ const CREATE_ACQUIRING_PAYMENT_DETAILS_MUTATION = gql`
             providerSlug
             qrText
             qrImageBase64
+            paymentUrl
         }
     }
 `
@@ -57,6 +58,12 @@ const PayPage: PageComponentType = () => {
         })
             .then((res) => {
                 const resultQrText = get(res, ['data', 'result', 'qrText'])
+                const paymentUrl = get(res, ['data', 'result', 'paymentUrl'])
+                if (paymentUrl) {
+                    // Providers with their own payment page (byl.mn) handle the payment method choice there
+                    window.location.assign(paymentUrl)
+                    return
+                }
                 if (resultQrText) {
                     setQrText(resultQrText)
                 } else {
