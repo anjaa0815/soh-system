@@ -1,0 +1,45 @@
+# Single-VM deployment for a small (1GB RAM) Oracle Free Tier instance.
+# Setup steps: see README.md next to this file.
+name: hutoch
+
+services:
+  postgres:
+    image: postgres:16.8
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: condo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: condo
+    # Kept small so postgres, redis and the app fit in 1GB RAM (+ swap)
+    command: postgres -c shared_buffers=64MB -c max_connections=40
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U condo"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 96mb
+    volumes:
+      - redisdata:/data
+
+  condo:
+    image: ghcr.io/anjaa0815/soh-system-condo:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=640
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "80:3000"
+
+volumes:
+  pgdata:
+  redisdata:
