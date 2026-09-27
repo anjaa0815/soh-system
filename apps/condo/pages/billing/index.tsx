@@ -1,22 +1,61 @@
-import React, { useCallback, useMemo } from 'react'
+import Head from 'next/head'
+import { useRouter } from 'next/router'
+import React, { useMemo } from 'react'
 
 import { useFeatureFlags } from '@open-condo/featureflags/FeatureFlagsContext'
 import { useIntl } from '@open-condo/next/intl'
 import { useOrganization } from '@open-condo/next/organization'
+import { Button, Card, Space, Typography } from '@open-condo/ui'
 
 import { CONTEXT_FINISHED_STATUS, CONTEXT_VERIFICATION_STATUS } from '@condo/domains/acquiring/constants/context'
-import { ACQUIRING_INTEGRATION_ONLINE_PROCESSING_TYPE } from '@condo/domains/acquiring/constants/integration'
 import { AcquiringIntegrationContext as AcquiringContext } from '@condo/domains/acquiring/utils/clientSchema'
 import { BillingPageContent } from '@condo/domains/billing/components/BillingPageContent'
 import { BillingAndAcquiringContext } from '@condo/domains/billing/components/BillingPageContent/ContextProvider'
-import { BillingOnboardingPage } from '@condo/domains/billing/components/OnBoarding'
 import { BillingIntegrationOrganizationContext as BillingContext } from '@condo/domains/billing/utils/clientSchema'
+import { PageContent, PageWrapper } from '@condo/domains/common/components/containers/BaseLayout'
 import LoadingOrErrorPage from '@condo/domains/common/components/containers/LoadingOrErrorPage'
 import { UI_BILLING_SPP_COMBINED_PAGE } from '@condo/domains/common/constants/featureflags'
 import { PageComponentType } from '@condo/domains/common/types'
 import { CONTEXT_FINISHED_STATUS as BILLING_FINISHED_STATUS } from '@condo/domains/miniapp/constants'
 import { OrganizationRequired } from '@condo/domains/organization/components/OrganizationRequired'
-import { MANAGING_COMPANY_TYPE, SERVICE_PROVIDER_TYPE } from '@condo/domains/organization/constants/common'
+
+/**
+ * Shown until the organization has a billing: monthly charges (fixed fees) are set up on /billing/monthly-charges
+ * and online payments (QPay etc.) on /settings/acquiring
+ */
+const BillingSetupPlaceholder: React.FC<{ title: string }> = ({ title }) => {
+    const intl = useIntl()
+    const Description = intl.formatMessage({ id: 'pages.billing.setupPlaceholder.description' })
+    const MonthlyChargesLabel = intl.formatMessage({ id: 'pages.billing.setupPlaceholder.monthlyCharges' })
+    const AcquiringLabel = intl.formatMessage({ id: 'pages.billing.setupPlaceholder.acquiring' })
+    const router = useRouter()
+
+    return (
+        <>
+            <Head><title>{title}</title></Head>
+            <PageWrapper>
+                <PageContent>
+                    <Space direction='vertical' size={40} width='100%'>
+                        <Typography.Title level={1}>{title}</Typography.Title>
+                        <Card>
+                            <Space direction='vertical' size={24} width='100%'>
+                                <Typography.Text type='secondary'>{Description}</Typography.Text>
+                                <Space size={16} wrap>
+                                    <Button type='primary' onClick={() => router.push('/billing/monthly-charges')}>
+                                        {MonthlyChargesLabel}
+                                    </Button>
+                                    <Button type='secondary' onClick={() => router.push('/settings/acquiring')}>
+                                        {AcquiringLabel}
+                                    </Button>
+                                </Space>
+                            </Space>
+                        </Card>
+                    </Space>
+                </PageContent>
+            </PageWrapper>
+        </>
+    )
+}
 
 const AccrualsAndPaymentsPage: PageComponentType = () => {
     const intl = useIntl()
@@ -26,7 +65,6 @@ const AccrualsAndPaymentsPage: PageComponentType = () => {
 
     const userOrganization = useOrganization()
     const orgId = userOrganization?.organization?.id ?? null
-    const orgType = userOrganization?.organization?.type ?? MANAGING_COMPANY_TYPE
     const organizationWhere = useMemo(() => ({ organization: { id: orgId } }), [orgId])
 
     const { objs: billingContexts, loading: billingLoading, error: billingError, refetch: refetchBilling } = BillingContext.useObjects({
@@ -36,20 +74,13 @@ const AccrualsAndPaymentsPage: PageComponentType = () => {
         },
     }, { skip: !orgId })
 
-    const { objs: acquiringContexts, loading: acquiringLoading, error: acquiringError, refetch: refetchAcquiring } = AcquiringContext.useObjects({
+    const { objs: acquiringContexts, loading: acquiringLoading, error: acquiringError } = AcquiringContext.useObjects({
         where: {
             ...organizationWhere,
             ...(!isCombinedPageEnabled && { status_in: [CONTEXT_FINISHED_STATUS, CONTEXT_VERIFICATION_STATUS] }),
         },
     }, { skip: !orgId })
 
-    const handleFinishSetup = useCallback(() => {
-        refetchBilling().then(() => refetchAcquiring())
-    }, [refetchBilling, refetchAcquiring])
-
-    const onlineProcessingAcquiringContext = useMemo(() => {
-        return acquiringContexts.find(({ integration }) => integration?.type === ACQUIRING_INTEGRATION_ONLINE_PROCESSING_TYPE)
-    }, [acquiringContexts])
     const hasFinishedBillingContext = useMemo(() => {
         return billingContexts.some(({ status }) => status === BILLING_FINISHED_STATUS)
     }, [billingContexts])
@@ -82,12 +113,7 @@ const AccrualsAndPaymentsPage: PageComponentType = () => {
         )
     }
 
-    const withVerification = (onlineProcessingAcquiringContext && onlineProcessingAcquiringContext.status === CONTEXT_VERIFICATION_STATUS) ||
-        orgType === SERVICE_PROVIDER_TYPE
-
-    return (
-        <BillingOnboardingPage onFinish={handleFinishSetup} withVerification={withVerification}/>
-    )
+    return <BillingSetupPlaceholder title={PageTitle}/>
 }
 
 AccrualsAndPaymentsPage.requiredAccess = OrganizationRequired

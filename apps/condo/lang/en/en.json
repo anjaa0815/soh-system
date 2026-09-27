@@ -4121,5 +4121,11 @@
   "pages.auth.verifyMn.waiting": "Waiting for your SMS… You will continue automatically once it is sent.",
   "pages.auth.verifyMn.verified": "Phone number confirmed",
   "pages.auth.verifyMn.expired": "The code has expired. Please request a new one.",
-  "pages.auth.verifyMn.paidSmsNotice": "Send the SMS only from the number being registered. Service fee: 150₮."
+  "pages.auth.verifyMn.paidSmsNotice": "Send the SMS only from the number being registered. Service fee: 150₮.",
+  "pages.billing.setupPlaceholder.description": "There are no accruals yet. Set up fixed monthly fees and the bank account in \"Monthly charges\" and generate the receipts of the month. Connect a payment provider such as QPay to let residents pay online.",
+  "pages.billing.setupPlaceholder.monthlyCharges": "Set up monthly charges",
+  "pages.billing.setupPlaceholder.acquiring": "Connect online payments",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.title": "No online payment provider is connected",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.description": "Connect QPay, Bonum or byl.mn first so residents can pay marketplace invoices online, then come back here to register the bank account.",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.button": "Connect a payment provider"
 }

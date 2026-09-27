@@ -4121,5 +4121,11 @@
   "pages.auth.verifyMn.waiting": "Esperando su SMS… Continuará automáticamente al enviarlo.",
   "pages.auth.verifyMn.verified": "Número confirmado",
   "pages.auth.verifyMn.expired": "El código ha caducado. Solicite uno nuevo.",
-  "pages.auth.verifyMn.paidSmsNotice": "Envíe el SMS solo desde el número que registra. Tarifa del servicio: 150₮."
+  "pages.auth.verifyMn.paidSmsNotice": "Envíe el SMS solo desde el número que registra. Tarifa del servicio: 150₮.",
+  "pages.billing.setupPlaceholder.description": "Todavía no hay cargos. Configure las cuotas mensuales y la cuenta bancaria en «Cargos mensuales» y genere los recibos del mes. Conecte un proveedor de pagos para que los residentes paguen en línea.",
+  "pages.billing.setupPlaceholder.monthlyCharges": "Configurar cargos mensuales",
+  "pages.billing.setupPlaceholder.acquiring": "Conectar pagos en línea",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.title": "No hay un proveedor de pagos en línea conectado",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.description": "Primero conecte un proveedor de pagos en línea y luego vuelva aquí para registrar la cuenta bancaria.",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.button": "Conectar proveedor de pagos"
 }

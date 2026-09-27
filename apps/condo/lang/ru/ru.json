@@ -4121,5 +4121,11 @@
   "pages.auth.verifyMn.waiting": "Ожидаем ваше SMS… После отправки вы продолжите автоматически.",
   "pages.auth.verifyMn.verified": "Номер подтверждён",
   "pages.auth.verifyMn.expired": "Срок действия кода истёк. Запросите новый.",
-  "pages.auth.verifyMn.paidSmsNotice": "Отправляйте SMS только с регистрируемого номера. Стоимость услуги: 150₮."
+  "pages.auth.verifyMn.paidSmsNotice": "Отправляйте SMS только с регистрируемого номера. Стоимость услуги: 150₮.",
+  "pages.billing.setupPlaceholder.description": "Начислений пока нет. Настройте ежемесячные платежи и счёт в разделе «Ежемесячные начисления» и сформируйте квитанции за месяц. Чтобы жители могли платить онлайн, подключите платёжный сервис.",
+  "pages.billing.setupPlaceholder.monthlyCharges": "Настроить начисления",
+  "pages.billing.setupPlaceholder.acquiring": "Подключить онлайн-оплату",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.title": "Не подключён сервис онлайн-оплаты",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.description": "Сначала подключите сервис онлайн-оплаты, затем вернитесь сюда и укажите реквизиты.",
+  "pages.condo.marketplace.settings.requisites.noAcquiring.button": "Подключить сервис оплаты"
 }

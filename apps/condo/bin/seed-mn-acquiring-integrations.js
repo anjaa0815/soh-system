@@ -51,6 +51,8 @@ async function main () {
             hostUrl: conf.SERVER_URL,
             type: ACQUIRING_INTEGRATION_ONLINE_PROCESSING_TYPE,
             supportedBillingIntegrationsGroup: DEFAULT_BILLING_INTEGRATION_GROUP,
+            canGroupReceipts: false,
+            explicitFeeDistributionSchema: [],
         }
 
         if (existing) {
@@ -66,7 +68,7 @@ async function main () {
 main().then(
     () => process.exit(),
     (error) => {
-        console.error(error)
+        console.error(error, JSON.stringify(error.errors || [], null, 2))
         process.exit(1)
     },
 )
