@@ -4115,5 +4115,11 @@
   "pages.billing.monthlyCharges.cash.cancel": "Anular",
   "pages.billing.monthlyCharges.cash.cancelConfirm": "¿Anular este pago? Dejará de contabilizarse.",
   "pages.billing.monthlyCharges.cash.cancelled": "Pago anulado",
-  "pages.billing.monthlyCharges.cash.empty": "Aún no hay recibos este mes"
+  "pages.billing.monthlyCharges.cash.empty": "Aún no hay recibos este mes",
+  "pages.auth.verifyMn.instruction": "Para confirmar su número, envíe el código {code} por SMS desde su teléfono al {shortcode}.",
+  "pages.auth.verifyMn.sendSms": "Enviar SMS",
+  "pages.auth.verifyMn.waiting": "Esperando su SMS… Continuará automáticamente al enviarlo.",
+  "pages.auth.verifyMn.verified": "Número confirmado",
+  "pages.auth.verifyMn.expired": "El código ha caducado. Solicite uno nuevo.",
+  "pages.auth.verifyMn.paidSmsNotice": "Envíe el SMS solo desde el número que registra. Tarifa del servicio: 150₮."
 }

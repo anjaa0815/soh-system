@@ -4115,5 +4115,11 @@
   "pages.billing.monthlyCharges.cash.cancel": "Cancel",
   "pages.billing.monthlyCharges.cash.cancelConfirm": "Cancel this payment? It will no longer be counted.",
   "pages.billing.monthlyCharges.cash.cancelled": "Payment cancelled",
-  "pages.billing.monthlyCharges.cash.empty": "No receipts for this month yet"
+  "pages.billing.monthlyCharges.cash.empty": "No receipts for this month yet",
+  "pages.auth.verifyMn.instruction": "To confirm your phone number, send the code {code} by SMS from your phone to {shortcode}.",
+  "pages.auth.verifyMn.sendSms": "Send SMS",
+  "pages.auth.verifyMn.waiting": "Waiting for your SMS… You will continue automatically once it is sent.",
+  "pages.auth.verifyMn.verified": "Phone number confirmed",
+  "pages.auth.verifyMn.expired": "The code has expired. Please request a new one.",
+  "pages.auth.verifyMn.paidSmsNotice": "Send the SMS only from the number being registered. Service fee: 150₮."
 }

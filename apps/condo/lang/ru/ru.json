@@ -4115,5 +4115,11 @@
   "pages.billing.monthlyCharges.cash.cancel": "Отменить",
   "pages.billing.monthlyCharges.cash.cancelConfirm": "Отменить этот платёж? Он перестанет учитываться.",
   "pages.billing.monthlyCharges.cash.cancelled": "Платёж отменён",
-  "pages.billing.monthlyCharges.cash.empty": "За этот месяц квитанций нет"
+  "pages.billing.monthlyCharges.cash.empty": "За этот месяц квитанций нет",
+  "pages.auth.verifyMn.instruction": "Чтобы подтвердить номер, отправьте код {code} по SMS со своего телефона на номер {shortcode}.",
+  "pages.auth.verifyMn.sendSms": "Отправить SMS",
+  "pages.auth.verifyMn.waiting": "Ожидаем ваше SMS… После отправки вы продолжите автоматически.",
+  "pages.auth.verifyMn.verified": "Номер подтверждён",
+  "pages.auth.verifyMn.expired": "Срок действия кода истёк. Запросите новый.",
+  "pages.auth.verifyMn.paidSmsNotice": "Отправляйте SMS только с регистрируемого номера. Стоимость услуги: 150₮."
 }
