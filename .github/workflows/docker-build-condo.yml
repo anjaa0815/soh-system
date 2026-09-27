@@ -22,7 +22,8 @@ jobs:
         with:
           node-version: 24
       - run: corepack enable
-      - run: yarn install
+      # yarn defaults to --immutable on CI; this fork's lockfile isn't in sync
+      - run: yarn install --no-immutable
       - run: echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
       - run: yarn workspace @app/condo build:deps
       - run: yarn tsc --noEmit -p apps/condo/tsconfig.json
