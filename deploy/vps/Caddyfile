@@ -1,0 +1,6 @@
+# SITE_ADDRESS is the domain (e.g. "hutuch.ai"): Caddy then gets and renews a Let's Encrypt
+# certificate on its own and redirects http to https. Without a domain it is ":80" (plain http).
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy condo:3000
+}
