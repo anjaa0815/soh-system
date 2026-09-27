@@ -32,6 +32,7 @@ services:
     env_file: .env
     environment:
       NODE_OPTIONS: --max-old-space-size=640
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
     depends_on:
       postgres:
         condition: service_healthy

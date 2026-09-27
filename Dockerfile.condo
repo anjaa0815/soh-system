@@ -7,10 +7,16 @@
 # survive the monorepo's webpack/tsup builds.
 FROM node:24-bookworm-slim AS base
 
+# Keep corepack's yarn download inside the image, so containers don't fetch
+# (and prompt for) yarn on every start
+ENV COREPACK_HOME=/opt/corepack
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
 RUN apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends python3 python3-pip \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
+    && corepack install -g yarn@4.17.0 \
     && python3 -m pip install --break-system-packages --no-cache-dir 'psycopg2-binary==2.9.10' 'Django==5.2'
 
 ENV NEXT_TELEMETRY_DISABLED=1
