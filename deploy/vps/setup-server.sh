@@ -39,7 +39,9 @@ echo "==> Starting postgres and redis"
 docker compose up -d postgres redis
 
 echo "==> Running database migrations"
-docker compose run --rm -T condo yarn migrate
+# stdin from /dev/null: under `curl | bash` the script itself is stdin, and
+# `docker compose run` would otherwise swallow the rest of it
+docker compose run --rm -T condo yarn migrate < /dev/null
 
 echo "==> Starting the app"
 docker compose up -d condo
