@@ -2,11 +2,9 @@
 const get = require('lodash/get')
 const nextCookie = require('next-cookies')
 
-const { parseAcceptLanguageHeader } = require('./headers')
-
 
 // TODO: Take it from @open-condo/config (right now it's not working and all apps implements only 2 locales, so maybe it's overhead)
-const ACCEPT_LOCALES = ['ru', 'en', 'es']
+const ACCEPT_LOCALES = ['ru', 'en', 'es', 'mn']
 
 /**
  * Get locale from Express request object or return conf.DEFAULT_LOCALE
@@ -36,13 +34,9 @@ const extractReqLocale = (req) => {
             return queryLocale
         }
 
-        const headersLocales = parseAcceptLanguageHeader(get(req, 'headers.accept-language'))
-        for (const localeConfig of headersLocales) {
-            if (ACCEPT_LOCALES.includes(localeConfig.code)) {
-                return localeConfig.code
-            }
-        }
-
+        // NOTE: The browser's Accept-Language is deliberately not used: most users in Mongolia
+        // have English/Russian browsers, and DEFAULT_LOCALE (the caller's fallback) should win
+        // unless the user picked a language explicitly (cookie / profile).
         const reqLocale = get(req, 'locale')
         if (reqLocale && ACCEPT_LOCALES.includes(reqLocale.toLowerCase())) {
             return reqLocale

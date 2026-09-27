@@ -11,6 +11,13 @@ export function useExecuteWithLock (
     useEffect(() => {
         if (typeof window === 'undefined') return
 
+        // Web Locks API exists only in secure contexts (https / localhost).
+        // Over plain http every tab just acts as the lock holder
+        if (!navigator.locks) {
+            fnRef.current()
+            return
+        }
+
         navigator.locks.request(lockName, () => {
             fnRef.current()
 

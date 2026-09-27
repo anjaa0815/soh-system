@@ -12,7 +12,7 @@
   flex: 1 1 0;
   flex-direction: column;
   min-width: 0;
-  background-color: var(--condo-global-color-white) !important;
+  background: var(--app-bg) !important;
 }
 
 @media (min-width: 768px) {
@@ -37,22 +37,28 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  width: min(100%, 1600px);
+  max-width: 1600px;
   height: 100%;
-  margin: 0;
-  padding: 20px 40px 0;
+  margin: 0 24px 24px;
+  padding: 32px 40px 0;
+  background: var(--app-surface);
+  border-radius: 24px;
+  box-shadow: var(--app-surface-shadow);
 }
 
 @media (max-width: 767px) {
   .page-wrapper {
+    margin: 0;
     padding: 24px 20px 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
 /* Page Header styles */
 .page-header {
   padding: 0 0 40px !important;
-  background: var(--condo-global-color-white);
+  background: var(--app-surface);
 }
 
 .page-header :global(.ant-page-header-heading) {
@@ -69,7 +75,7 @@
 
 .spaced-page-header {
   padding: 0 0 60px !important;
-  background: var(--condo-global-color-white);
+  background: var(--app-surface);
 }
 
 .spaced-page-header :global(.ant-page-header-heading-title) {
@@ -80,13 +86,13 @@
 .page-content {
   flex-grow: 1;
   max-width: 1600px;
-  background: var(--condo-global-color-white);
+  background: var(--app-surface);
 }
 
 .table-page-content {
   flex-grow: 1;
   max-width: 1600px;
-  background: var(--condo-global-color-white);
+  background: var(--app-surface);
 }
 
 /* Mobile SideNav styles */

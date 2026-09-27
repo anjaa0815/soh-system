@@ -10,6 +10,7 @@ import { CacheProvider } from '@emotion/react'
 import { ConfigProvider } from 'antd'
 import enUS from 'antd/lib/locale/en_US'
 import esES from 'antd/lib/locale/es_ES'
+import mnMN from 'antd/lib/locale/mn_MN'
 import ruRU from 'antd/lib/locale/ru_RU'
 import { setCookie } from 'cookies-next'
 import dayjs from 'dayjs'
@@ -66,6 +67,7 @@ import {
     MARKET_CATEGORY,
     BILLING_CATEGORY,
     METERS_CATEGORY,
+    DOCUMENTS_CATEGORY,
     MINIAPPS_CATEGORY,
     SETTINGS_CATEGORY,
 } from '@condo/domains/common/constants/menuCategories'
@@ -116,6 +118,7 @@ import Error429Page from './429'
 import Error500Page from './500'
 
 import 'antd/dist/antd.less'
+import 'leaflet/dist/leaflet.css'
 import 'react-phone-input-2/lib/style.css'
 import '@condo/domains/common/components/wdyr'
 import '@open-condo/ui/dist/styles.min.css'
@@ -147,6 +150,7 @@ const ANT_LOCALES = {
     ru: ruRU,
     en: enUS,
     es: esES,
+    mn: mnMN,
 }
 
 interface IMenuItemData {
@@ -207,6 +211,7 @@ const MenuItems: React.FC = () => {
     const hasAccessToContacts = role?.canReadContacts || false
     const hasAccessToAnalytics = role?.canReadAnalytics
     const hasAccessToMeters = role?.canReadMeters || false
+    const hasAccessToDocuments = role?.canReadDocuments || false
     const hasAccessToServices = role?.canReadServices || false
     const hasAccessToSettings = role?.canReadSettings || false
     const hasAccessToMarketplace = role?.canReadMarketItems || role?.canReadInvoices || role?.canReadPaymentsWithInvoices || false
@@ -325,11 +330,19 @@ const MenuItems: React.FC = () => {
                 {
                     id: 'menu-item-billing',
                     path: 'billing',
-                    icon: AllIcons['Ruble'],
+                    icon: AllIcons['Wallet'],
                     label: shouldShowCombinedBilling ? 'global.section.SPP' : 'global.section.accrualsAndPayments',
                     access: shouldShowCombinedBilling ? hasAccessToBilling : isSPPOrg
                         ? hasAccessToBilling && anyReceiptsLoaded
                         : hasAccessToBilling,
+                    excludePaths: [/^\/billing\/monthly-charges/],
+                },
+                {
+                    id: 'menu-item-monthly-charges',
+                    path: 'billing/monthly-charges',
+                    icon: AllIcons['Bill'],
+                    label: 'global.section.monthlyCharges',
+                    access: Boolean(role?.canManageIntegrations),
                 },
                 ...(!shouldShowCombinedBilling ? [{
                     id: 'menu-item-service-provider-profile',
@@ -349,6 +362,18 @@ const MenuItems: React.FC = () => {
                     icon: AllIcons['Meters'],
                     label: 'global.section.meters',
                     access: hasAccessToMeters,
+                },
+            ].filter(checkItemAccess),
+        },
+        {
+            key: DOCUMENTS_CATEGORY,
+            items: [
+                {
+                    id: 'menu-item-documents',
+                    path: 'documents',
+                    icon: AllIcons['FileText'],
+                    label: 'global.section.documents',
+                    access: hasAccessToDocuments && isManagingCompany,
                 },
             ].filter(checkItemAccess),
         },
@@ -379,7 +404,7 @@ const MenuItems: React.FC = () => {
                 },
             ].filter(checkItemAccess),
         },
-    ]), [hasAccessToTour, isManagingCompany, hasAccessToAnalytics, hasAccessToTickets, hasAccessToIncidents, hasAccessToNewsItems, hasAccessToProperties, hasAccessToContacts, hasAccessToEmployees, hasAccessToMarketplace, isNoServiceProviderOrganization, shouldShowCombinedBilling, hasAccessToBilling, isSPPOrg, anyReceiptsLoaded, sppBillingId, hasAccessToMeters, hasAccessToServices, connectedAppsIds, hasAccessToSettings])
+    ]), [hasAccessToTour, isManagingCompany, hasAccessToAnalytics, hasAccessToTickets, hasAccessToIncidents, hasAccessToNewsItems, hasAccessToProperties, hasAccessToContacts, hasAccessToEmployees, hasAccessToMarketplace, isNoServiceProviderOrganization, shouldShowCombinedBilling, hasAccessToBilling, isSPPOrg, anyReceiptsLoaded, sppBillingId, hasAccessToMeters, hasAccessToDocuments, hasAccessToServices, connectedAppsIds, hasAccessToSettings])
 
     return (
         <div>

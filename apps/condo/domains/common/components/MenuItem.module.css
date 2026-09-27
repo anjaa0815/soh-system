@@ -1,6 +1,19 @@
 .menu-item-wrapper {
-  padding: 9px 0;
+  /* horizontal padding is compensated by the negative margin to keep the original alignment */
+  margin: 0 -12px;
+  padding: 9px 12px;
+  border-radius: 12px;
   cursor: pointer;
+  transition: background var(--condo-global-transition-duration-default);
+}
+
+.menu-item-wrapper:hover {
+  background: var(--app-menu-hover-bg);
+}
+
+.menu-item-wrapper.active {
+  background: var(--app-menu-active-bg);
+  box-shadow: 0 2px 8px rgb(34 34 34 / 5%);
 }
 
 .menu-item-wrapper .menu-item * {
@@ -11,6 +24,11 @@
 .menu-item-wrapper:hover .menu-item *,
 .menu-item-wrapper.active .menu-item * {
   color: var(--condo-global-color-black) !important;
+}
+
+.menu-item-wrapper.active .menu-item svg,
+.menu-item-wrapper.active .menu-item svg * {
+  color: var(--app-menu-active-icon) !important;
 }
 
 .menu-item-wrapper .condo-typography {

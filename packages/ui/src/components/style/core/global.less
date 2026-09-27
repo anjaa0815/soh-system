@@ -30,6 +30,21 @@
   src: url("/public/fonts/wix-madefor-display/wix-madefor-display-v11-cyrillic_cyrillic-ext_latin_latin-ext-700.woff2") format("woff2"); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
 }
 
+/*
+ * Wix Madefor Display has no glyphs for the Mongolian-specific Cyrillic letters Өө/Үү,
+ * so the browser silently falls back to a mismatched system font for just those two
+ * letters. Patch the gap with Noto Sans's cyrillic-ext glyphs (which does have them),
+ * scoped via unicode-range so every other character still uses Wix Madefor Display.
+ */
+@font-face {
+  font-display: swap;
+  font-weight: 400 700;
+  font-family: "Wix Madefor Display";
+  font-style: normal;
+  src: url("/public/fonts/noto-sans-mn-patch/noto-sans-v42-cyrillic-ext-variable.woff2") format("woff2");
+  unicode-range: U+04AE-04AF, U+04E8-04E9;
+}
+
 // Monospace font is used for code blocks
 
 /* noto-sans-mono-regular - cyrillic_cyrillic-ext_latin_latin-ext */

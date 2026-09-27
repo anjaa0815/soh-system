@@ -20,6 +20,8 @@ function buildIpDictionary (ips) {
 }
 
 function checkIpInDictionary (dictionary, ip) {
+    // req.ip is undefined once the client has already closed the connection
+    if (!ip) return false
     const octets = ip.split('.')
     let currentLevel = dictionary
     for (let i = 0; i < octets.length; i++) {

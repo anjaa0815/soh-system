@@ -1,8 +1,9 @@
-const { RU_LOCALE, EN_LOCALE, ES_LOCALE, DEFAULT_LOCALE } = require('./locale')
+const { RU_LOCALE, EN_LOCALE, ES_LOCALE, MN_LOCALE, DEFAULT_LOCALE } = require('./locale')
 
 const DEFAULT_ENGLISH_COUNTRY = 'en'
 const RUSSIA_COUNTRY = 'ru'
 const SPAIN_COUNTRY = 'es'
+const MONGOLIA_COUNTRY = 'mn'
 
 const COUNTRIES = {
     [DEFAULT_ENGLISH_COUNTRY]: {
@@ -34,14 +35,26 @@ const COUNTRIES = {
         phonePattern: /^[+]34[0-9-. ()]{7,}[0-9]$/gi,
         locale: ES_LOCALE,
     },
+    [MONGOLIA_COUNTRY]: {
+        'role.admin.name': 'Админ',
+        'role.dispatcher.name': 'Оператор',
+        'role.manager.name': 'Менежер',
+        'role.foreman.name': 'Ахлах мастер',
+        'role.technician.name' : 'Техникч',
+        // statusTransitions: {},  // TODO(pahaz): write logic for transitions
+        phonePattern: /^[+]976[0-9-. ()]{7,}[0-9]$/gi,
+        locale: MN_LOCALE,
+    },
 }
 
 module.exports = {
     DEFAULT_ENGLISH_COUNTRY,
     RUSSIA_COUNTRY,
     SPAIN_COUNTRY,
+    MONGOLIA_COUNTRY,
     COUNTRIES,
     DEFAULT_LOCALE,
     EN_LOCALE,
     RU_LOCALE,
+    MN_LOCALE,
 }

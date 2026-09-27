@@ -13,6 +13,8 @@ const ALLOWED_WITHOUT_SUBSCRIPTION: string[] = [
     '/429',
     '/500',
     '/initial',
+    '/pay',
+    '/resident',
     '/share',
     '/tls',
     '/unsubscribed',

@@ -1,6 +1,5 @@
 import { Col, Row } from 'antd'
 import { getCookie, setCookie } from 'cookies-next'
-import getConfig from 'next/config'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import React from 'react'
@@ -16,12 +15,6 @@ import AuthLayout from '@condo/domains/user/components/containers/AuthLayout'
 import { ResponsiveCol } from '@condo/domains/user/components/containers/ResponsiveCol'
 import { AUTH_FLOW_USER_TYPE_COOKIE_NAME, WAS_AUTHENTICATED_COOKIE_NAME } from '@condo/domains/user/constants/auth'
 
-
-const {
-    publicRuntimeConfig: {
-        residentAppInfo,
-    },
-} = getConfig()
 
 const AuthPage: PageComponentType = () => {
     const intl = useIntl()
@@ -75,8 +68,6 @@ const AuthPage: PageComponentType = () => {
 AuthPage.container = AuthLayout
 AuthPage.skipUserPrefetch = true
 AuthPage.getPrefetchedData = async ({ context }) => {
-    const hasResidentApp = residentAppInfo?.mobile?.help && residentAppInfo?.mobile?.download
-
     const userType = getCookie(AUTH_FLOW_USER_TYPE_COOKIE_NAME, { req: context?.req, res: context?.res })
     const wasAuthenticated = getCookie(WAS_AUTHENTICATED_COOKIE_NAME, { req: context?.req, res: context?.res })
 
@@ -84,7 +75,7 @@ AuthPage.getPrefetchedData = async ({ context }) => {
     const isValidNext = !Array.isArray(next) && isSafeUrl(next)
 
     let nextUrl = null
-    if (wasAuthenticated || userType === 'staff' || !hasResidentApp) {
+    if (wasAuthenticated || userType === 'staff') {
         nextUrl = isValidNext ? `/auth/signin?next=${encodeURIComponent(next)}` : '/auth/signin'
     } else if (userType === 'resident') {
         nextUrl = '/auth/resident'
