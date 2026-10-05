@@ -9,7 +9,7 @@ import { useOrganization } from '@open-condo/next/organization'
 import { Button, Input, Typography } from '@open-condo/ui'
 
 import { CONTEXT_FINISHED_STATUS } from '@condo/domains/acquiring/constants/context'
-import { getProviderBySlug, PROVIDERS } from '@condo/domains/acquiring/integrations/providers'
+import { getProviderMetaBySlug, PROVIDERS_META } from '@condo/domains/acquiring/integrations/providers/meta'
 import { AcquiringIntegration, AcquiringIntegrationContext } from '@condo/domains/acquiring/utils/clientSchema'
 import { PageContent, PageWrapper } from '@condo/domains/common/components/containers/BaseLayout'
 import { FormItem } from '@condo/domains/common/components/Form/FormItem'
@@ -81,7 +81,7 @@ const AcquiringSettingsPage: PageComponentType = () => {
     const handleCancelSelection = useCallback(() => setSelectedSlug(null), [])
 
     const handleSubmit = useCallback(async (values: Record<string, string>) => {
-        const provider = getProviderBySlug(selectedSlug)
+        const provider = getProviderMetaBySlug(selectedSlug)
         const integration = integrations.find((item) => item.name === PROVIDER_NAMES[selectedSlug])
         if (!provider || !integration || !orgId) return
 
@@ -95,7 +95,7 @@ const AcquiringSettingsPage: PageComponentType = () => {
         await refetchAll()
     }, [selectedSlug, integrations, orgId, createContextAction, refetchAll])
 
-    const selectedProvider = useMemo(() => getProviderBySlug(selectedSlug), [selectedSlug])
+    const selectedProvider = useMemo(() => getProviderMetaBySlug(selectedSlug), [selectedSlug])
 
     if (orgLoading || integrationsLoading || contextsLoading) {
         return <Loader fill size='large' />
@@ -134,7 +134,7 @@ const AcquiringSettingsPage: PageComponentType = () => {
                                 <Col span={24}>
                                     <Row gutter={[16, 16]}>
                                         {
-                                            PROVIDERS.map((provider) => (
+                                            PROVIDERS_META.map((provider) => (
                                                 <Col key={provider.slug} span={8}>
                                                     <Card>
                                                         <Row gutter={[0, 16]}>

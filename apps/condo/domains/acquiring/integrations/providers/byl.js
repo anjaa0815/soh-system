@@ -21,14 +21,7 @@ const PAID_STATUS = 'paid'
 // byl expects due_date in the future, an unpaid invoice stays payable for this long
 const INVOICE_TTL_IN_MS = 3 * 24 * 60 * 60 * 1000
 
-const slug = 'byl'
-const name = 'byl.mn'
-
-const configFields = [
-    { name: 'projectId', labelId: 'acquiring.provider.byl.field.projectId', type: 'text', required: true },
-    { name: 'apiKey', labelId: 'acquiring.provider.byl.field.apiKey', type: 'password', required: true },
-    { name: 'webhookSecret', labelId: 'acquiring.provider.byl.field.webhookSecret', type: 'password', required: true },
-]
+const { slug, name, configFields } = require('./meta').BYL
 
 function getInvoicesUrl (settings) {
     return `${BYL_API_URL}/projects/${encodeURIComponent(String(settings.projectId).trim())}/invoices`

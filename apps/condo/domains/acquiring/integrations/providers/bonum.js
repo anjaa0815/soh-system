@@ -15,12 +15,7 @@
  *  - Whether merchant onboarding is per-organization or platform-wide
  */
 
-const slug = 'bonum'
-const name = 'Bonum'
-
-const configFields = [
-    { name: 'secretKey', labelId: 'acquiring.provider.bonum.field.secretKey', type: 'password', required: true },
-]
+const { slug, name, configFields } = require('./meta').BONUM
 
 async function createPayment () {
     throw new Error('Bonum adapter is not implemented yet: payment-creation API shape is unknown, see comment at the top of this file')

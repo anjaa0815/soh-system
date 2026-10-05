@@ -14,15 +14,7 @@
 
 const QPAY_BASE_URL = 'https://merchant.qpay.mn/v2'
 
-const slug = 'qpay'
-const name = 'QPay'
-
-const configFields = [
-    { name: 'merchantId', labelId: 'acquiring.provider.qpay.field.merchantId', type: 'text', required: true },
-    { name: 'username', labelId: 'acquiring.provider.qpay.field.username', type: 'text', required: true },
-    { name: 'password', labelId: 'acquiring.provider.qpay.field.password', type: 'password', required: true },
-    { name: 'invoiceCode', labelId: 'acquiring.provider.qpay.field.invoiceCode', type: 'text', required: true },
-]
+const { slug, name, configFields } = require('./meta').QPAY
 
 async function getAccessToken (settings) {
     const { username, password } = settings
