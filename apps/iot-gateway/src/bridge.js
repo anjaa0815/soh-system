@@ -45,6 +45,49 @@ class Bridge extends EventEmitter {
         return this
     }
 
+    /**
+     * Attach the parking adapter. Entry/exit events are de-duplicated, attributed to the
+     * condo Contact that owns the plate (when it is a resident's), and — if a history
+     * CustomField is configured — appended to that contact's parking history in condo.
+     * @param {import('./adapters/parkingAdapter').ParkingAdapter} adapter
+     * @param {Object} options
+     * @param {import('./parking/parkingSync').ParkingSync} options.sync
+     * @param {import('./parking/stateStore').StateStore} options.store
+     * @param {string} [options.historyCustomFieldId]
+     * @param {string} [options.b2bAppId]
+     * @param {number} [options.historySize]
+     */
+    useParkingAdapter (adapter, { sync, store, historyCustomFieldId, b2bAppId, historySize = 20 }) {
+        const histories = new Map()
+        const writeQueues = new Map()
+        adapter.on('vehicleEvent', (event) => {
+            const key = `${event.direction}|${event.plate}|${event.time.getTime()}`
+            if (!store.markEventSeen(key)) return
+            store.save()
+
+            const contact = sync.ownerOf(event.plate)
+            logger.info('parking: vehicle event', {
+                direction: event.direction, plate: event.plate, channel: event.channel, resident: Boolean(contact),
+            })
+            this.emit('vehicleEvent', { ...event, contact })
+            if (!contact || !historyCustomFieldId) return
+
+            const history = histories.get(contact.id) || []
+            history.unshift({ direction: event.direction, plate: event.plate, time: event.time.toISOString(), channel: event.channel })
+            histories.set(contact.id, history.slice(0, historySize))
+            // Writes for one contact are chained: two events arriving together would otherwise
+            // both find "no value yet" and create two CustomValues instead of one.
+            const snapshot = histories.get(contact.id)
+            const previous = writeQueues.get(contact.id) || Promise.resolve()
+            writeQueues.set(contact.id, previous.then(() => this.condoClient.upsertCustomValue({
+                customFieldId: historyCustomFieldId, objectId: contact.id, data: snapshot, b2bAppId,
+            })).catch((err) => logger.error('parking: failed to store history in condo', event.plate, err.message)))
+        })
+        adapter.on('occupancy', (occupancy) => this.emit('occupancy', occupancy))
+        adapter.on('error', (err) => logger.error('adapter error:', err.message))
+        return this
+    }
+
     async _handleReading (rawReading) {
         const isPropertyMeter = rawReading.scope === 'property'
         try {

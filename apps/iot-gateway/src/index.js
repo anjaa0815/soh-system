@@ -4,7 +4,10 @@ const { config } = require('./config')
 const { logger } = require('./logger')
 const { MqttAdapter } = require('./adapters/mqttAdapter')
 const { OnvifAdapter } = require('./adapters/onvifAdapter')
+const { ParkingAdapter } = require('./adapters/parkingAdapter')
 const { Rs485Adapter } = require('./adapters/rs485Adapter')
+const { ParkingSync } = require('./parking/parkingSync')
+const { StateStore } = require('./parking/stateStore')
 
 async function main () {
     const condoClient = new CondoClient(config.condo)
@@ -33,8 +36,24 @@ async function main () {
         })
     }
 
-    if (!config.mqtt.enabled && !config.rs485.enabled && !config.onvif.enabled) {
-        logger.warn('no adapters enabled — set MQTT_ENABLED / RS485_ENABLED / ONVIF_ENABLED in .env')
+    if (config.parking.enabled) {
+        const store = new StateStore(config.parking.stateFile)
+        const parkingAdapter = new ParkingAdapter(config.parking)
+        const sync = new ParkingSync({ condoClient, adapter: parkingAdapter, store }, config.parking)
+        bridge.useParkingAdapter(parkingAdapter, {
+            sync,
+            store,
+            historyCustomFieldId: config.parking.historyCustomFieldId,
+            b2bAppId: config.condo.b2bAppId,
+        })
+        await parkingAdapter.start()
+        const runSync = () => sync.syncOnce().catch((err) => logger.error('parking: sync failed', err.message))
+        await runSync()
+        setInterval(runSync, config.parking.syncIntervalMs)
+    }
+
+    if (!config.mqtt.enabled && !config.rs485.enabled && !config.onvif.enabled && !config.parking.enabled) {
+        logger.warn('no adapters enabled — set MQTT_ENABLED / RS485_ENABLED / ONVIF_ENABLED / PARKING_ENABLED in .env')
     }
 }
 

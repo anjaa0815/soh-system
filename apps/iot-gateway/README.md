@@ -20,6 +20,7 @@ as its own process/service, exactly like this one.
 |---|---|---|
 | MQTT | `src/adapters/mqttAdapter.js` | Fully implemented, end-to-end tested (see `demo/`) against a real MQTT broker and a live condo instance. |
 | RS-485 / Modbus | `src/adapters/rs485Adapter.js` | Implemented against the `modbus-serial` API, **not tested against real hardware** — register addresses/scaling are illustrative and must be adjusted to your meters' actual Modbus map. |
+| Parking (barrier / ALPR server) | `src/adapters/parkingAdapter.js` | Implemented against the parking server's third-party HTTP API. Endpoints, methods and response envelopes were **checked against a live parking server**; plate sync and entry/exit handling are covered by `npm test` against in-process fakes. **Not yet tested with real vehicles or a live condo instance** — see "Parking" below. |
 | ONVIF (cameras/NVR) | `src/adapters/onvifAdapter.js` | Implemented against the `onvif` package's API, including multi-channel NVR support (`listChannels`, per-channel snapshot/stream URIs) — **not tested against real hardware**. Motion event topic names vary by manufacturer and must be verified against your specific camera/NVR model. |
 
 ## Two kinds of meter reading
@@ -162,3 +163,78 @@ Each adapter only knows its own protocol and emits a small, protocol-agnostic ev
 shape (`reading` for meters, `motionEvent` for cameras). `Bridge` is the only piece
 that knows about condo's mutations, via `CondoClient`. This keeps "add a new protocol"
 and "change how condo is called" as independent changes.
+
+## Parking
+
+Connects a barrier-gate parking server (ALPR cameras, the "yard" server with its
+`/yard/third` HTTP API) to condo, so that who may drive in is decided by condo's resident
+data instead of a list someone maintains by hand at the gate.
+
+What it does:
+
+- **Resident plates -> barrier access.** Plates recorded on a condo `Contact` are
+  registered in the parking server as monthly cars (`/monthRental`). Remove the plate,
+  let it expire, or delete the contact, and the next sync cancels it (`/monthCancel`).
+- **Entries and exits -> condo.** Entry/exit records are pulled every
+  `PARKING_POLL_INTERVAL_MS`, de-duplicated, attributed to the resident who owns the
+  plate, and (optionally) the last 20 are stored on that contact.
+- **Occupancy.** `ParkingAdapter.getOccupancy()` returns free/total spaces.
+
+It only ever cancels plates it issued itself (tracked in `parking-state.json`). Monthly
+cars a cashier registered directly in the parking software are never touched.
+
+### Where plates live in condo
+
+condo has no vehicle model, and this adapter does not add one. Plates are stored in a
+`CustomField` on the `Contact` model, which a B2BApp service user is allowed to read and
+write. One-time setup, in the Keystone Admin UI:
+
+1. Create a `CustomField`: `modelName: Contact`, `type: Json`, `isUniquePerObject: true`,
+   `staffCanRead: true`, name e.g. "Машины дугаар". Its id goes in
+   `PARKING_PLATES_CUSTOM_FIELD_ID`.
+2. (Optional) Create a second one the same way, e.g. "Зогсоолын түүх", for
+   `PARKING_HISTORY_CUSTOM_FIELD_ID`.
+3. Give the gateway's `B2BAppAccessRightSet` read access to `Contact` and read/manage
+   access to `CustomValue`, and put the B2BApp's id in `CONDO_B2B_APP_ID`.
+
+A value is a list of plates, optionally with an expiry:
+
+```json
+[{ "plate": "1234УБА" }, { "plate": "5678УНА", "validUntil": "2026-12-31" }]
+```
+
+Only a B2BApp service user (or an admin) can write CustomValues — staff cannot edit them
+in the condo UI today. Until a miniapp screen exists for that, load plates with:
+
+```bash
+npm run parking:import -- vehicles.csv --dry-run   # phone,plate[,validUntil]
+npm run parking:import -- vehicles.csv
+```
+
+### Running it
+
+```bash
+# .env: PARKING_ENABLED=true, PARKING_API_URL, PARKING_PLATES_CUSTOM_FIELD_ID, CONDO_*
+npm run parking:check   # read-only: proves both sides are reachable, changes nothing
+npm test                # the whole pipeline against in-process fakes
+npm start
+```
+
+### Security
+
+The parking server's third-party API has **no authentication** and includes a command
+that opens the barrier. Anyone who can reach that port can open the gate. Keep the
+parking server and this gateway on an isolated LAN/VLAN, never port-forward it, and keep
+guest Wi-Fi off that network. This adapter intentionally does not implement gate
+opening; if you add it, put it behind condo's own permission checks first.
+
+### What is still unverified
+
+- `/monthRental`'s body (`carNum`, `name`, `phone`, `department`, `carType`, `startDate`,
+  `endDate`, `chargeMoney`, `payType`) was derived from the parking server's own model,
+  not from documentation. Issue one test plate and confirm it appears under monthly cars.
+- The field names read from entry/exit rows (`carNo`, `time`, `leaveTime`, `enterPass`,
+  `leavePass`) have not been seen with real traffic — `npm run parking:check` prints a
+  raw sample row to compare.
+- The condo GraphQL calls were written against the schema in this repository and tested
+  against a fake, not against a running condo.
