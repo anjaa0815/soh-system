@@ -491,6 +491,7 @@ enum UserLocaleType {
   ru
   en
   es
+  mn
 }
 
 type CustomAccessFieldRule {
@@ -91711,6 +91712,7 @@ enum ExecutionAIFlowTaskLocaleType {
   ru
   en
   es
+  mn
 }
 
 """ Allows you to run a deferred task to execute a request to AI. Saves information about the request, as well as about the process of executing the request itself. 
@@ -92545,6 +92547,7 @@ enum AISkillLocaleType {
   ru
   en
   es
+  mn
 }
 
 enum AISkillScopeType {

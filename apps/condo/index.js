@@ -24,6 +24,7 @@ const { MessagingMiddleware, setupMessaging } = require('@open-condo/messaging')
 const { getWebhookModels } = require('@open-condo/webhooks/schema')
 const { getWebhookTasks } = require('@open-condo/webhooks/tasks')
 
+const { AcquiringWebhookMiddleware } = require('@condo/domains/acquiring/AcquiringWebhookMiddleware')
 const { PaymentLinkMiddleware } = require('@condo/domains/acquiring/PaymentLinkMiddleware')
 const { WEBHOOK_EVENTS } = require('@condo/domains/common/constants/webhooks')
 const { VersioningMiddleware } = require('@condo/domains/common/utils/VersioningMiddleware')
@@ -127,6 +128,7 @@ const apps = () => {
         new FeaturesMiddleware(),
         new MessagingMiddleware(),
         new PaymentLinkMiddleware(),
+        new AcquiringWebhookMiddleware(),
         new UnsubscribeMiddleware(),
         new FileMiddleware({ apiPrefix: '/api/files' }),
         FileAdapter.makeFileAdapterMiddleware(),

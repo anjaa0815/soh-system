@@ -17,6 +17,7 @@ const { REGISTER_MULTI_PAYMENT_FOR_INVOICES_MUTATION } = require('@condo/domains
 const { CALCULATE_FEE_FOR_RECEIPT_QUERY } = require('@condo/domains/acquiring/gql')
 const { SET_PAYMENT_POS_RECEIPT_URL_MUTATION } = require('@condo/domains/acquiring/gql')
 const { REGISTER_EXTERNAL_PAYMENTS_MUTATION } = require('@condo/domains/acquiring/gql')
+const { CREATE_ACQUIRING_PAYMENT_DETAILS_MUTATION } = require('@condo/domains/acquiring/gql')
 /* AUTOGENERATE MARKER <IMPORT> */
 
 const AcquiringIntegration = generateServerUtils('AcquiringIntegration')
@@ -147,6 +148,20 @@ async function registerExternalPayments (context, data) {
     })
 }
 
+async function createAcquiringPaymentDetails (context, data) {
+    if (!context) throw new Error('no context')
+    if (!data) throw new Error('no data')
+    if (!data.sender) throw new Error('no data.sender')
+    // TODO(codegen): write createAcquiringPaymentDetails serverSchema guards
+
+    return await execGqlWithoutAccess(context, {
+        query: CREATE_ACQUIRING_PAYMENT_DETAILS_MUTATION,
+        variables: { data: { dv: 1, ...data } },
+        errorMessage: '[error] Unable to createAcquiringPaymentDetails',
+        dataPath: 'obj',
+    })
+}
+
 /* AUTOGENERATE MARKER <CONST> */
 
 module.exports = {
@@ -168,5 +183,6 @@ module.exports = {
     PaymentsFile,
     setPaymentPosReceiptUrl,
     registerExternalPayments,
+    createAcquiringPaymentDetails,
 /* AUTOGENERATE MARKER <EXPORTS> */
 }

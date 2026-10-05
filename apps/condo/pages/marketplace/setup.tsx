@@ -15,6 +15,7 @@ import { AcquiringIntegrationContext } from '@condo/domains/acquiring/utils/clie
 import { useOnboardingProgress } from '@condo/domains/billing/hooks/useOnboardingProgress'
 import { PageHeader, PageWrapper } from '@condo/domains/common/components/containers/BaseLayout'
 import { TablePageContent } from '@condo/domains/common/components/containers/BaseLayout/BaseLayout'
+import { RUSSIA_COUNTRY } from '@condo/domains/common/constants/countries'
 import { PageComponentType } from '@condo/domains/common/types'
 import { OfferSetupPage } from '@condo/domains/marketplace/components/MarketplaceOnboarding/OfferSetupPage'
 import { RequisitesSetup } from '@condo/domains/marketplace/components/MarketplaceOnboarding/RequisitesSetup'
@@ -45,6 +46,8 @@ const MarketplaceOnboardingPage: PageComponentType<MarketplaceOnboardingPageProp
 
     const { organization } = useOrganization()
     const orgId = get(organization, 'id', null)
+    // NOTE: the offer (SberBusiness) step exists only for Russian organizations, see RequisitesSetup
+    const isRussia = (get(organization, 'country') || RUSSIA_COUNTRY) === RUSSIA_COUNTRY
 
     const {
         obj: acquiringContext,
@@ -72,12 +75,13 @@ const MarketplaceOnboardingPage: PageComponentType<MarketplaceOnboardingPageProp
     const stepItems: Array<StepItem> = useMemo(() => {
         const steps: Array<StepItem> = [
             { title: RequisitesSettingsTitle, breakPoint: true },
-            { title: OfferSettingsTitle },
         ]
+        if (isRussia) steps.push({ title: OfferSettingsTitle })
         return steps
     }, [
         RequisitesSettingsTitle,
         OfferSettingsTitle,
+        isRussia,
     ])
 
     const handleReturn = useCallback((newStep: number) => {
@@ -85,12 +89,12 @@ const MarketplaceOnboardingPage: PageComponentType<MarketplaceOnboardingPageProp
     }, [router])
 
     const currentScreen = useMemo(() => {
-        if (currentStep === 1) {
+        if (currentStep === 1 && isRussia) {
             return <OfferSetupPage onFinish={handleFinishSetup}/>
         }
 
         return <RequisitesSetup />
-    }, [currentStep, handleFinishSetup])
+    }, [currentStep, handleFinishSetup, isRussia])
 
     return (
         <>

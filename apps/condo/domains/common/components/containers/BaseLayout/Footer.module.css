@@ -2,7 +2,7 @@
   width: 100%;
   max-width: 1600px;
   padding: 10px 40px 20px !important;
-  background: var(--condo-global-color-white) !important;
+  background: transparent !important;
 }
 
 @media (max-width: 767px) {

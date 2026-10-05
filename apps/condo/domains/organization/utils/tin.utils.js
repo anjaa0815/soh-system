@@ -1,7 +1,7 @@
 const isNumber = require('lodash/isNumber')
 const isString = require('lodash/isString')
 
-const { RUSSIA_COUNTRY, SPAIN_COUNTRY } = require('@condo/domains/common/constants/countries')
+const { RUSSIA_COUNTRY, SPAIN_COUNTRY, MONGOLIA_COUNTRY } = require('@condo/domains/common/constants/countries')
 
 // Digits for Ru tin checksum calculation
 const RU_TIN_DIGITS = [3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8, 0]
@@ -34,10 +34,24 @@ const validateTinES = tinValue => {
     return nifRegex.test(tinValue)
 }
 
+// Mongolian legal entity state registration number (улсын бүртгэлийн дугаар) is a 7-digit numeric code
+// issued by the General Authority for State Registration. Confirm against the latest official spec
+// before relying on this for production use.
+const MN_ORGANIZATION_TIN_REGEXP = /^\d{7}$/
+
+const validateTinMN = tinValue => {
+    if (!isString(tinValue) && !isNumber(tinValue)) return false
+
+    const tin = tinValue.toString().trim()
+
+    return MN_ORGANIZATION_TIN_REGEXP.test(tin)
+}
+
 const isValidTin = (tinValue = null, country = RUSSIA_COUNTRY) => {
     if (country === RUSSIA_COUNTRY) return validateTinRU(tinValue)
-    // TODO: DOMA-663 add tin validations for countries other than Russian Federation
     if (country === SPAIN_COUNTRY) return validateTinES(tinValue)
+    if (country === MONGOLIA_COUNTRY) return validateTinMN(tinValue)
+    // TODO: DOMA-663 add tin validations for countries other than Russian Federation, Spain and Mongolia
     return true
 }
 
@@ -46,6 +60,7 @@ const getIsValidTin = (country = RUSSIA_COUNTRY) => (tinValue = null) => isValid
 
 module.exports = {
     validateTinRU,
+    validateTinMN,
     isValidTin,
     getIsValidTin,
 }

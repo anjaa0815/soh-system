@@ -276,7 +276,15 @@ function prepareKeystone ({ onConnect, extendKeystoneConfig, extendExpressApp, s
             })
 
             // NOTE(toplenboren): we need a custom body parser for custom file upload limit
-            app.use(json({ limit: '100mb', extended: true }))
+            // NOTE: webhook handlers verify signatures computed over the exact bytes sent (e.g. byl.mn's Byl-Signature),
+            // so the raw body is kept for them only
+            app.use(json({
+                limit: '100mb',
+                extended: true,
+                verify: (req, res, buf) => {
+                    if (req.originalUrl && req.originalUrl.startsWith('/api/webhooks/')) req.rawBody = buf
+                },
+            }))
             app.use(urlencoded({ limit: '100mb', extended: true }))
 
 
