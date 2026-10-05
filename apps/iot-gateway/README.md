@@ -204,7 +204,27 @@ A value is a list of plates, optionally with an expiry:
 ```
 
 Only a B2BApp service user (or an admin) can write CustomValues — staff cannot edit them
-in the condo UI today. Until a miniapp screen exists for that, load plates with:
+in the condo UI today. This gateway is such a service user, so it offers two ways in.
+
+**Plate editor** (day-to-day): a small web screen for the security desk or HOA office.
+Search a resident by name, phone or unit, add or remove plates, optionally with an expiry
+date, and save. Saving writes the plates to condo and immediately syncs the barrier.
+
+```bash
+# .env
+PARKING_ADMIN_ENABLED=true
+PARKING_ADMIN_PIN=<4+ characters>        # required: it will not start without one
+PARKING_ADMIN_HOST=127.0.0.1             # or this machine's LAN address for the office network
+PARKING_ADMIN_PORT=8091
+```
+
+It refuses a plate that is already recorded on another resident, only sees contacts of
+`CONDO_ORGANIZATION_ID`, and locks an address out for 5 minutes after 10 wrong PINs. The
+PIN is shared by everyone who uses the screen and travels over plain HTTP, so keep it on
+the same isolated LAN as the parking server; put it behind a reverse proxy with TLS and
+real per-user login before exposing it any wider.
+
+**CSV import** (onboarding a compound from the list its security desk already keeps):
 
 ```bash
 npm run parking:import -- vehicles.csv --dry-run   # phone,plate[,validUntil]

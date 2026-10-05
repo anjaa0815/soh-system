@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Машины дугаарын бүртгэл</title>
+<style>
+    :root {
+        --bg: #f2f4f1; --surface: #ffffff; --ink: #18211c; --muted: #5c6a62; --line: #d6ddd7;
+        --accent: #1f6b4a; --accent-ink: #ffffff; --danger: #a8321f; --warn-bg: #fdf1dc; --warn-ink: #7a4a06;
+        --plate-bg: #fbfbf6; --plate-line: #18211c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif; }
+    .wrap { max-width: 880px; margin: 0 auto; padding-block: 20px 48px; padding-inline: 16px; display: grid; gap: 16px; }
+    header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
+    h1 { font-size: 21px; margin: 0; }
+    .status { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 13px; }
+    .status b { color: var(--ink); font-variant-numeric: tabular-nums; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+    .dot.ok { background: var(--accent); } .dot.bad { background: var(--danger); }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%; }
+    input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+    button.quiet { background: transparent; color: var(--muted); font-weight: 500; padding: 6px 8px; }
+    button:disabled { opacity: .5; cursor: default; }
+    .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+    .list { display: grid; gap: 12px; }
+    .person { display: grid; gap: 12px; }
+    .who { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+    .who strong { font-size: 16px; } .who span { color: var(--muted); font-size: 13px; }
+    .plates { display: flex; flex-wrap: wrap; gap: 8px; min-height: 38px; align-items: center; }
+    .plate { display: inline-flex; align-items: center; gap: 8px; background: var(--plate-bg); border: 2px solid var(--plate-line); border-radius: 6px; padding: 3px 4px 3px 10px; font: 700 16px/1.2 Consolas, "Courier New", monospace; letter-spacing: 1px; }
+    .plate small { font: 500 11px/1 "Segoe UI", Arial, sans-serif; letter-spacing: 0; color: var(--muted); }
+    .plate button { background: transparent; color: var(--danger); padding: 2px 7px; font-size: 16px; line-height: 1; }
+    .none { color: var(--muted); font-size: 13px; }
+    .add { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+    .add input.p { text-transform: uppercase; font-family: Consolas, "Courier New", monospace; letter-spacing: 1px; }
+    .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .note { font-size: 13px; } .note.ok { color: var(--accent); } .note.err { color: var(--danger); }
+    .dirty { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+    .login { max-width: 360px; margin: 12vh auto 0; display: grid; gap: 12px; }
+    [hidden] { display: none !important; }
+    @media (max-width: 560px) { .add { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <section class="panel login" id="login">
+        <h1>Машины дугаарын бүртгэл</h1>
+        <div><label for="pin">PIN код</label><input id="pin" type="password" inputmode="numeric" autocomplete="off"></div>
+        <button id="enter">Нэвтрэх</button>
+        <div class="note err" id="login-err"></div>
+    </section>
+
+    <div id="app" hidden style="display:grid;gap:16px">
+        <header>
+            <h1>Машины дугаарын бүртгэл</h1>
+            <div class="status">
+                <span><i class="dot" id="st-dot"></i><span id="st-park">Зогсоолын систем</span></span>
+                <span>Сул байр <b id="st-free">-</b></span>
+                <span>Эрхтэй дугаар <b id="st-issued">-</b></span>
+                <button class="quiet" id="logout">Гарах</button>
+            </div>
+        </header>
+
+        <section class="panel">
+            <label for="q">Оршин суугч хайх</label>
+            <input id="q" placeholder="Нэр, утас эсвэл тоот" autocomplete="off">
+            <p class="hint" id="hint">Хамгийн багадаа 2 тэмдэгт бичнэ үү.</p>
+        </section>
+
+        <div class="list" id="list"></div>
+    </div>
+</div>
+
+<template id="person-tpl">
+    <section class="panel person">
+        <div class="who"><strong data-name></strong><span data-unit></span><span data-phone></span><span class="dirty" data-dirty hidden>Хадгалаагүй</span></div>
+        <div class="plates" data-plates></div>
+        <div class="add">
+            <div><label>Улсын дугаар</label><input class="p" data-new maxlength="12" placeholder="1234УБА" autocomplete="off"></div>
+            <div><label>Дуусах огноо (заавал биш)</label><input type="date" data-until></div>
+            <button class="quiet" data-add style="border:1px solid var(--line);color:var(--ink)">Нэмэх</button>
+        </div>
+        <div class="actions"><button data-save disabled>Хадгалах</button><span class="note" data-note></span></div>
+    </section>
+</template>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const UNIT = { flat: 'тоот', parking: 'зогсоол', apartment: 'апартмент', warehouse: 'агуулах', commercial: 'үйлчилгээ' }
+let pin = ''
+try { pin = sessionStorage.getItem('parking-pin') || '' } catch (e) { /* storage unavailable */ }
+
+async function api (method, url, body) {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-Pin': pin }, body: body ? JSON.stringify(body) : undefined })
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) { showLogin(data.error); throw new Error(data.error) }
+    if (!res.ok) throw new Error(data.error || 'Алдаа гарлаа')
+    return data
+}
+function showLogin (message) {
+    pin = ''
+    try { sessionStorage.removeItem('parking-pin') } catch (e) { /* ignore */ }
+    $('app').hidden = true; $('login').hidden = false; $('login-err').textContent = message || ''; $('pin').value = ''; $('pin').focus()
+}
+async function enter () {
+    pin = $('pin').value
+    try {
+        await refreshStatus()
+        try { sessionStorage.setItem('parking-pin', pin) } catch (e) { /* ignore */ }
+        $('login').hidden = true; $('app').hidden = false; $('q').focus()
+    } catch (e) { $('login-err').textContent = e.message }
+}
+async function refreshStatus () {
+    const s = await api('GET', '/api/status')
+    $('st-dot').className = 'dot ' + (s.parking.ok ? 'ok' : 'bad')
+    $('st-park').textContent = s.parking.ok ? 'Зогсоолын систем холбогдсон' : 'Зогсоолын систем холбогдоогүй'
+    $('st-free').textContent = s.parking.ok ? `${s.parking.free} / ${s.parking.total}` : '-'
+    $('st-issued').textContent = s.issued
+}
+const norm = (v) => String(v || '').toUpperCase().replace(/[\s\-_.]/g, '')
+
+function renderPerson (contact) {
+    const node = $('person-tpl').content.firstElementChild.cloneNode(true)
+    const q = (sel) => node.querySelector(sel)
+    let plates = contact.plates.map((p) => ({ ...p }))
+    let saved = JSON.stringify(plates)
+    q('[data-name]').textContent = contact.name || 'Нэргүй'
+    q('[data-unit]').textContent = [contact.propertyAddress, contact.unitName && `${UNIT[contact.unitType] || ''} ${contact.unitName}`.trim()].filter(Boolean).join(', ')
+    q('[data-phone]').textContent = contact.phone || ''
+    const note = (text, kind) => { q('[data-note]').textContent = text || ''; q('[data-note]').className = 'note ' + (kind || '') }
+    const draw = () => {
+        const box = q('[data-plates]'); box.textContent = ''
+        if (plates.length === 0) { const e = document.createElement('span'); e.className = 'none'; e.textContent = 'Бүртгэлтэй дугаар алга'; box.appendChild(e) }
+        plates.forEach((p, i) => {
+            const chip = document.createElement('span'); chip.className = 'plate'; chip.append(p.plate)
+            if (p.validUntil) { const s = document.createElement('small'); s.textContent = p.validUntil + ' хүртэл'; chip.appendChild(s) }
+            const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', p.plate + ' дугаарыг хасах')
+            x.onclick = () => { plates.splice(i, 1); draw() }
+            chip.appendChild(x); box.appendChild(chip)
+        })
+        const dirty = JSON.stringify(plates) !== saved
+        q('[data-dirty]').hidden = !dirty; q('[data-save]').disabled = !dirty
+    }
+    const add = () => {
+        const plate = norm(q('[data-new]').value)
+        if (!/^[0-9A-ZА-ЯӨҮЁ]{4,10}$/.test(plate)) return note('Дугаараа зөв оруулна уу (жишээ: 1234УБА)', 'err')
+        if (plates.some((p) => p.plate === plate)) return note('Энэ дугаар жагсаалтад байна', 'err')
+        const until = q('[data-until]').value
+        plates.push(until ? { plate, validUntil: until } : { plate })
+        q('[data-new]').value = ''; q('[data-until]').value = ''; note(''); draw(); q('[data-new]').focus()
+    }
+    q('[data-add]').onclick = add
+    q('[data-new]').addEventListener('keydown', (e) => { if (e.key === 'Enter') add() })
+    q('[data-save]').onclick = async () => {
+        q('[data-save]').disabled = true; note('Хадгалж байна...')
+        try {
+            const r = await api('PUT', `/api/contacts/${contact.id}/plates`, { plates })
+            plates = r.plates; saved = JSON.stringify(plates); draw()
+            if (r.sync && r.sync.error) note('Хадгаллаа, гэхдээ зогсоолын системд илгээж чадсангүй: ' + r.sync.error, 'err')
+            else if (r.sync && r.sync.failed) note(`Хадгаллаа, ${r.sync.failed} дугаарыг зогсоолын системд илгээж чадсангүй. Дараагийн синхрончлолоор дахин оролдоно.`, 'err')
+            else note('Хадгаллаа. Зогсоолын системд шинэчлэгдлээ.', 'ok')
+            refreshStatus().catch(() => {})
+        } catch (e) { note(e.message, 'err'); draw() }
+    }
+    draw()
+    return node
+}
+
+let timer = null, seq = 0
+async function search () {
+    const query = $('q').value.trim(), mine = ++seq
+    if (query.length < 2) { $('list').textContent = ''; $('hint').textContent = 'Хамгийн багадаа 2 тэмдэгт бичнэ үү.'; return }
+    $('hint').textContent = 'Хайж байна...'
+    try {
+        const { contacts } = await api('GET', '/api/contacts?q=' + encodeURIComponent(query))
+        if (mine !== seq) return
+        $('list').textContent = ''
+        contacts.forEach((c) => $('list').appendChild(renderPerson(c)))
+        $('hint').textContent = contacts.length ? `${contacts.length} оршин суугч олдлоо.` : 'Оршин суугч олдсонгүй.'
+    } catch (e) { if (mine === seq) $('hint').textContent = e.message }
+}
+$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 300) })
+$('enter').onclick = enter
+$('pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') enter() })
+$('logout').onclick = () => showLogin('')
+if (pin) { $('pin').value = pin; enter() } else $('pin').focus()
+</script>
+</body>
+</html>

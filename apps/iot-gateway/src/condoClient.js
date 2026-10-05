@@ -57,6 +57,15 @@ const UPDATE_CUSTOM_VALUE = gql`
 
 const PAGE_SIZE = 100
 
+const toContact = (contact) => ({
+    id: contact.id,
+    name: contact.name,
+    phone: contact.phone,
+    unitName: contact.unitName,
+    unitType: contact.unitType,
+    propertyAddress: contact.property ? contact.property.address : '',
+})
+
 const SENDER = { dv: 1, fingerprint: 'iot-gateway' }
 
 class CondoClient {
@@ -147,14 +156,7 @@ class CondoClient {
                 first: PAGE_SIZE,
             })
             for (const contact of data.items) {
-                contactsById.set(contact.id, {
-                    id: contact.id,
-                    name: contact.name,
-                    phone: contact.phone,
-                    unitName: contact.unitName,
-                    unitType: contact.unitType,
-                    propertyAddress: contact.property ? contact.property.address : '',
-                })
+                contactsById.set(contact.id, toContact(contact))
             }
         }
 
@@ -204,6 +206,48 @@ class CondoClient {
             },
         })
         return result.result
+    }
+
+    /**
+     * Free-text search over this organization's contacts (name, phone or unit).
+     * @param {string} query
+     */
+    async searchContacts (query, limit = 30) {
+        const data = await this.client.request(ALL_CONTACTS, {
+            where: {
+                organization: { id: this.organizationId },
+                deletedAt: null,
+                OR: [{ name_contains_i: query }, { phone_contains: query }, { unitName_contains_i: query }],
+            },
+            first: limit,
+        })
+        return data.items.map(toContact)
+    }
+
+    /** One contact of this organization, or null — never a contact of another organization. */
+    async getContact (id) {
+        const data = await this.client.request(ALL_CONTACTS, {
+            where: { id, organization: { id: this.organizationId }, deletedAt: null },
+            first: 1,
+        })
+        return data.items.length > 0 ? toContact(data.items[0]) : null
+    }
+
+    /**
+     * Raw plate values for a set of contacts.
+     * @returns {Promise<Map<string, *>>} contactId -> CustomValue.data
+     */
+    async getPlatesForContacts (platesCustomFieldId, contactIds) {
+        const result = new Map()
+        if (contactIds.length === 0) return result
+        const values = await this._allPages(ALL_CUSTOM_VALUES, {
+            customField: { id: platesCustomFieldId },
+            organization: { id: this.organizationId },
+            objectId_in: contactIds,
+            deletedAt: null,
+        })
+        for (const value of values) result.set(value.objectId, value.data)
+        return result
     }
 
     /** Finds one contact of this organization by phone (used by scripts/import-vehicles.js). */

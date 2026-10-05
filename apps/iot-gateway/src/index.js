@@ -6,6 +6,7 @@ const { MqttAdapter } = require('./adapters/mqttAdapter')
 const { OnvifAdapter } = require('./adapters/onvifAdapter')
 const { ParkingAdapter } = require('./adapters/parkingAdapter')
 const { Rs485Adapter } = require('./adapters/rs485Adapter')
+const { createAdminServer } = require('./parking/adminServer')
 const { ParkingSync } = require('./parking/parkingSync')
 const { StateStore } = require('./parking/stateStore')
 
@@ -50,6 +51,18 @@ async function main () {
         const runSync = () => sync.syncOnce().catch((err) => logger.error('parking: sync failed', err.message))
         await runSync()
         setInterval(runSync, config.parking.syncIntervalMs)
+
+        if (config.parking.admin.enabled) {
+            const { host, port, pin } = config.parking.admin
+            createAdminServer({
+                condoClient,
+                sync,
+                adapter: parkingAdapter,
+                platesCustomFieldId: config.parking.platesCustomFieldId,
+                b2bAppId: config.condo.b2bAppId,
+                pin,
+            }).listen(port, host, () => logger.info(`parking admin: plate editor on http://${host}:${port}`))
+        }
     }
 
     if (!config.mqtt.enabled && !config.rs485.enabled && !config.onvif.enabled && !config.parking.enabled) {

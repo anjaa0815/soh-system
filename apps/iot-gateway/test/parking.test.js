@@ -14,6 +14,7 @@ const { test, before, after } = require('node:test')
 const { ParkingAdapter } = require('../src/adapters/parkingAdapter')
 const { Bridge } = require('../src/bridge')
 const { CondoClient } = require('../src/condoClient')
+const { createAdminServer } = require('../src/parking/adminServer')
 const { ParkingSync } = require('../src/parking/parkingSync')
 const { normalizePlate, parsePlatesValue } = require('../src/parking/plates')
 const { StateStore } = require('../src/parking/stateStore')
@@ -53,11 +54,21 @@ before(async () => {
         if (req.headers.authorization !== 'Bearer service-token') return send(res, { errors: [{ message: 'unauthorized' }] }, 401)
         if (query.includes('allCustomValues')) {
             const where = variables.where
-            const items = condo.customValues.filter((value) => value.customField === where.customField.id && (!where.objectId || value.objectId === where.objectId))
+            const items = condo.customValues.filter((value) => value.customField === where.customField.id
+                && (!where.objectId || value.objectId === where.objectId)
+                && (!where.objectId_in || where.objectId_in.includes(value.objectId)))
             return send(res, { data: { items: items.slice(variables.skip, variables.skip + variables.first) } })
         }
         if (query.includes('allContacts')) {
-            return send(res, { data: { items: condo.contacts.filter((contact) => variables.where.id_in.includes(contact.id)) } })
+            const where = variables.where
+            let items = condo.contacts.filter((contact) => !where.organization || (contact.organization || 'org-1') === where.organization.id)
+            if (where.id_in) items = items.filter((contact) => where.id_in.includes(contact.id))
+            if (where.id) items = items.filter((contact) => contact.id === where.id)
+            if (where.OR) {
+                const needle = where.OR[0].name_contains_i.toLowerCase()
+                items = items.filter((contact) => [contact.name, contact.phone, contact.unitName].some((field) => String(field || '').toLowerCase().includes(needle)))
+            }
+            return send(res, { data: { items: items.slice(0, variables.first) } })
         }
         if (query.includes('createCustomValue')) {
             const value = { id: `cv-${condo.customValues.length + 1}`, customField: variables.data.customField.connect.id, objectId: variables.data.objectId, data: variables.data.data }
@@ -205,4 +216,67 @@ test('occupancy is read from the parking server', async () => {
 test('the adapter does not expose a gate-open command', () => {
     const { adapter } = newPipeline()
     assert.strictEqual(typeof adapter.openGate, 'undefined')
+})
+
+test('plate editor: PIN is enforced, plates are validated, saved to condo and pushed to the parking server', async () => {
+    const A = 'aaaaaaaa-0000-4000-8000-000000000001', B = 'aaaaaaaa-0000-4000-8000-000000000002', OTHER = 'aaaaaaaa-0000-4000-8000-000000000003'
+    condo.contacts = [
+        { id: A, name: 'Бат-Эрдэнэ', phone: '+97699112233', unitName: '45', unitType: 'flat', property: { id: 'p-1', address: '12-р байр' } },
+        { id: B, name: 'Сарантуяа', phone: '+97688001122', unitName: '46', unitType: 'flat', property: { id: 'p-1', address: '12-р байр' } },
+        { id: OTHER, name: 'Өөр байгууллагын хүн', phone: '+97611111111', unitName: '1', unitType: 'flat', property: null, organization: 'org-2' },
+    ]
+    condo.customValues = [{ id: 'cv-b', customField: 'field-plates', objectId: B, data: [{ plate: '5678УНА' }] }]
+    condo.writes = []; yard.monthly.clear(); yard.cancelled = []
+
+    const { condoClient, adapter, sync } = newPipeline()
+    await adapter.heartbeat(); await sync.syncOnce()
+    assert.throws(() => createAdminServer({ condoClient, sync, adapter, platesCustomFieldId: 'field-plates', b2bAppId: 'app-1', pin: '' }), /PIN/)
+    const server = createAdminServer({ condoClient, sync, adapter, platesCustomFieldId: 'field-plates', b2bAppId: 'app-1', pin: '4821' })
+    const port = await listen(server)
+    const call = async (method, url, body, pinValue = '4821') => {
+        const res = await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { 'Content-Type': 'application/json', 'X-Pin': pinValue }, body: body ? JSON.stringify(body) : undefined })
+        return { status: res.status, data: await res.json().catch(() => null) }
+    }
+    try {
+        const page = await fetch(`http://127.0.0.1:${port}/`)
+        assert.strictEqual(page.status, 200); assert.match(await page.text(), /Машины дугаарын бүртгэл/)
+
+        assert.strictEqual((await call('GET', '/api/status', null, 'wrong')).status, 401)
+        assert.strictEqual((await call('GET', '/api/contacts?q=бат', null, '')).status, 401)
+        assert.strictEqual((await call('PUT', `/api/contacts/${A}/plates`, { plates: [{ plate: '1111ААА' }] }, '0000')).status, 401)
+        assert.strictEqual(condo.writes.length, 0)
+
+        const status = await call('GET', '/api/status')
+        assert.deepStrictEqual(status.data.parking, { ok: true, parkingNo: 'P00061847', free: 37, total: 120 })
+        assert.strictEqual(status.data.issued, 1)
+
+        let found = await call('GET', '/api/contacts?q=' + encodeURIComponent('бат'))
+        assert.deepStrictEqual(found.data.contacts.map((c) => [c.name, c.plates.length]), [['Бат-Эрдэнэ', 0]])
+        found = await call('GET', '/api/contacts?q=46')
+        assert.deepStrictEqual(found.data.contacts[0].plates, [{ plate: '5678УНА', validUntil: null }])
+        assert.deepStrictEqual((await call('GET', '/api/contacts?q=' + encodeURIComponent('Өөр'))).data.contacts, [])   // other organization is invisible
+
+        for (const bad of [{ plates: 'x' }, { plates: [{ plate: 'ab' }] }, { plates: [{ plate: '1234<script>' }] }, { plates: [{ plate: '1234УБА', validUntil: 'soon' }] }, { plates: Array.from({ length: 11 }, (_, i) => ({ plate: `10${String(i).padStart(2, '0')}УБА` })) }]) {
+            assert.strictEqual((await call('PUT', `/api/contacts/${A}/plates`, bad)).status, 400)
+        }
+        assert.strictEqual((await call('PUT', `/api/contacts/${OTHER}/plates`, { plates: [{ plate: '1234УБА' }] })).status, 404)
+        const clash = await call('PUT', `/api/contacts/${A}/plates`, { plates: [{ plate: '5678 уна' }] })
+        assert.strictEqual(clash.status, 409); assert.match(clash.data.error, /Сарантуяа/)
+        assert.strictEqual(condo.writes.length, 0)
+
+        const saved = await call('PUT', `/api/contacts/${A}/plates`, { plates: [{ plate: '1234 уба' }, { plate: '1234УБА' }, { plate: '9999УБЕ', validUntil: '2099-06-30' }] })
+        assert.strictEqual(saved.status, 200)
+        assert.deepStrictEqual(saved.data.plates, [{ plate: '1234УБА' }, { plate: '9999УБЕ', validUntil: '2099-06-30' }])
+        assert.strictEqual(saved.data.sync.issued, 2)
+        assert.ok(yard.monthly.has('1234УБА')); assert.strictEqual(yard.monthly.get('9999УБЕ').endDate, '2099-06-30'); assert.strictEqual(yard.monthly.get('1234УБА').name, 'Бат-Эрдэнэ')
+
+        const removed = await call('PUT', `/api/contacts/${A}/plates`, { plates: [{ plate: '9999УБЕ', validUntil: '2099-06-30' }] })
+        assert.strictEqual(removed.data.sync.cancelled, 1); assert.deepStrictEqual(yard.cancelled, ['1234УБА']); assert.ok(!yard.monthly.has('1234УБА'))
+        assert.ok(yard.monthly.has('5678УНА'))   // the other resident is untouched
+
+        for (let i = 0; i < 10; i++) await call('GET', '/api/status', null, 'guess' + i)
+        assert.strictEqual((await call('GET', '/api/status')).status, 429)   // locked out even with the right PIN
+    } finally {
+        server.close()
+    }
 })

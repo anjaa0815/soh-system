@@ -55,6 +55,12 @@ const config = {
         defaultValidDays: Number(process.env.PARKING_DEFAULT_VALID_DAYS || 365),
         platesCustomFieldId: process.env.PARKING_PLATES_CUSTOM_FIELD_ID || '',
         historyCustomFieldId: process.env.PARKING_HISTORY_CUSTOM_FIELD_ID || '',
+        admin: {
+            enabled: process.env.PARKING_ADMIN_ENABLED === 'true',
+            host: process.env.PARKING_ADMIN_HOST || '127.0.0.1',
+            port: Number(process.env.PARKING_ADMIN_PORT || 8091),
+            pin: process.env.PARKING_ADMIN_PIN || '',
+        },
         stateFile: process.env.PARKING_STATE_FILE || path.resolve(__dirname, '..', 'parking-state.json'),
     },
 }
