@@ -39,6 +39,13 @@ const {
     generateSmsCode,
 } = require('@condo/domains/user/utils/serverSchema')
 const { RedisGuard } = require('@condo/domains/user/utils/serverSchema/guards')
+const {
+    isVerifyMnEnabled,
+    startVerifyMnSession,
+    getVerifyMnSession,
+    getVerifyMnSessionStatus,
+    VERIFY_MN_VERIFIED_STATUS,
+} = require('@condo/domains/user/utils/serverSchema/verifyMn')
 const { TOKEN_TYPES, generateTokenSafely } = require('@condo/domains/user/utils/tokens')
 
 
@@ -180,6 +187,14 @@ const ConfirmPhoneActionService = new GQLCustomSchema('ConfirmPhoneActionService
             access: true,
             type: 'type CompleteConfirmPhoneActionOutput { status: String! }',
         },
+        {
+            access: true,
+            type: 'input GetConfirmPhoneActionVerifyMnSessionInput { token: String! }',
+        },
+        {
+            access: true,
+            type: 'type ConfirmPhoneActionVerifyMnSessionOutput { shortcode: String!, text: String!, smsUri: String, displayInstruction: String, status: String! }',
+        },
     ],
     queries: [
         {
@@ -210,6 +225,28 @@ const ConfirmPhoneActionService = new GQLCustomSchema('ConfirmPhoneActionService
                 }
                 const { phone, isPhoneVerified } = actions[0]
                 return { phone, isPhoneVerified }
+            },
+        },
+        {
+            access: true,
+            schema: 'getConfirmPhoneActionVerifyMnSession(data: GetConfirmPhoneActionVerifyMnSessionInput!): ConfirmPhoneActionVerifyMnSessionOutput',
+            doc: {
+                summary: 'When phones are verified with Verify.MN (the user sends the code by SMS), returns what the user has to send and where, and the current status. Returns null otherwise',
+            },
+            resolver: async (parent, args, context) => {
+                const { data: { token } } = args
+                if (!isVerifyMnEnabled()) return null
+                const actions = await ConfirmPhoneAction.getAll(context, {
+                    token,
+                    expiresAt_gte: new Date().toISOString(),
+                    completedAt: null,
+                }, 'id')
+                if (isEmpty(actions)) return null
+                const session = await getVerifyMnSession(token)
+                if (!session) return null
+                const status = await getVerifyMnSessionStatus(session.sessionId)
+                const { shortcode, text, smsUri, displayInstruction } = session
+                return { shortcode, text, smsUri, displayInstruction, status }
             },
         },
     ],
@@ -305,6 +342,11 @@ const ConfirmPhoneActionService = new GQLCustomSchema('ConfirmPhoneActionService
 
                 await ConfirmPhoneAction.create(context, variables)
 
+                if (isVerifyMnEnabled()) {
+                    await startVerifyMnSession({ token, phone: normalizedPhone, code: smsCode, ttlInSec: CONFIRM_PHONE_ACTION_EXPIRY })
+                    return { token }
+                }
+
                 const appId = get(context.req, ['headers', APP_ID_HEADER])
 
                 await sendMessage(context, {
@@ -365,6 +407,10 @@ const ConfirmPhoneActionService = new GQLCustomSchema('ConfirmPhoneActionService
                     smsCodeExpiresAt: new Date(now + SMS_CODE_TTL * 1000).toISOString(),
                     smsCodeRequestedAt: new Date(now).toISOString(),
                 })
+                if (isVerifyMnEnabled()) {
+                    await startVerifyMnSession({ token, phone, code: newSmsCode, ttlInSec: CONFIRM_PHONE_ACTION_EXPIRY })
+                    return { status: 'ok' }
+                }
                 const appId = get(context.req, ['headers', APP_ID_HEADER])
                 await sendMessage(context, {
                     to: { phone },
@@ -415,6 +461,21 @@ const ConfirmPhoneActionService = new GQLCustomSchema('ConfirmPhoneActionService
                 await redisGuard.checkLock(token, 'confirm', context)
                 await redisGuard.lock(token, 'confirm', LOCK_TIMEOUT)
                 const { id, smsCode: actionSmsCode, retries, smsCodeExpiresAt } = actions[0]
+
+                // With Verify.MN the code is shown to the user, so only the SMS the user sent proves the phone
+                const verifyMnSession = isVerifyMnEnabled() ? await getVerifyMnSession(token) : null
+                if (verifyMnSession) {
+                    const status = await getVerifyMnSessionStatus(verifyMnSession.sessionId)
+                    if (status !== VERIFY_MN_VERIFIED_STATUS) {
+                        throw new GQLError(ERRORS.SMS_CODE_VERIFICATION_FAILED, context)
+                    }
+                    await ConfirmPhoneAction.update(context, id, {
+                        dv: 1,
+                        sender,
+                        isPhoneVerified: true,
+                    })
+                    return { status: 'ok' }
+                }
                 const isExpired = (new Date(smsCodeExpiresAt) < new Date(now))
                 if (isExpired) {
                     throw new GQLError(ERRORS.SMS_CODE_EXPIRED, context)

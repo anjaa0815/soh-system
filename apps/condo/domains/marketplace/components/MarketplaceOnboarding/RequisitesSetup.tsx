@@ -9,7 +9,7 @@ import { useIntl } from '@open-condo/next/intl'
 import { useOrganization } from '@open-condo/next/organization'
 import { Alert, Button, Radio, RadioGroup, Select, SelectProps, Space } from '@open-condo/ui'
 
-import { TAX_REGIME_GENEGAL, TAX_REGIME_SIMPLE, CONTEXT_IN_PROGRESS_STATUS } from '@condo/domains/acquiring/constants/context'
+import { TAX_REGIME_GENEGAL, TAX_REGIME_SIMPLE, CONTEXT_IN_PROGRESS_STATUS, CONTEXT_FINISHED_STATUS } from '@condo/domains/acquiring/constants/context'
 import { AcquiringIntegrationContext as AcquiringIntegrationContextApi, AcquiringIntegration as AcquiringIntegrationApi } from '@condo/domains/acquiring/utils/clientSchema'
 import { BankAccount as BankAccountApi } from '@condo/domains/banking/utils/clientSchema'
 import LoadingOrErrorPage from '@condo/domains/common/components/containers/LoadingOrErrorPage'
@@ -27,6 +27,12 @@ const FORM_VALIDATE_TRIGGER = ['onBlur', 'onSubmit']
 const VERTICAL_GUTTER: RowProps['gutter'] = [0, 40]
 const LABEL_COL = { lg: 10 }
 
+// Mongolian IBAN: MN + 2 check digits + 4 digit bank code + account number
+const MN_IBAN_REGEXP = /^MN\d{2}(\d{4})\d+$/
+
+const normalizeAccount = (value: string): string => (value || '').replace(/\s+/g, '').toUpperCase()
+const getBankCodeFromIban = (value: string): string | null => get(normalizeAccount(value).match(MN_IBAN_REGEXP), 1, null)
+
 const getOptions = (items: BankAccount[], fieldName: string): SelectProps['options'] => (items.map((item) => {
     const field = get(item, fieldName, null)
     return { label: field, value: field }
@@ -34,7 +40,12 @@ const getOptions = (items: BankAccount[], fieldName: string): SelectProps['optio
 
 export const RequisitesSetup: React.FC = () => {
     const intl = useIntl()
-    const { numberValidator, routingNumberValidator } = useBankAccountValidation({ country: RUSSIA_COUNTRY })
+    const { organization } = useOrganization()
+    const country = get(organization, 'country') || RUSSIA_COUNTRY
+    // NOTE: outside of Russia there is no SberBusiness offer: requisites are saved to the organization's
+    // online processing context (QPay etc., connected on /settings/acquiring) and the setup is finished at once
+    const isRussia = country === RUSSIA_COUNTRY
+    const { numberValidator, routingNumberValidator } = useBankAccountValidation({ country })
     const { requiredValidator } = useValidations()
 
     const AccountLabel = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.field.account' })
@@ -48,10 +59,13 @@ export const RequisitesSetup: React.FC = () => {
     const NoTax = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.noTax' })
     const RecipientErrorTitle = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.error' })
     const TinTooltipLabel = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.field.tin.tooltip' })
+    const NoAcquiringTitle = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.noAcquiring.title' })
+    const NoAcquiringDescription = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.noAcquiring.description' })
+    const NoAcquiringButton = intl.formatMessage({ id: 'pages.condo.marketplace.settings.requisites.noAcquiring.button' })
+    const SaveButtonLabel = intl.formatMessage({ id: 'Save' })
 
     const [error, setError] = useState<string | null>(null)
     const [loading, setIsLoading] = useState<boolean>(false)
-    const { organization } = useOrganization()
     const orgId = get(organization, 'id', null)
     const [form] = Form.useForm()
     const router = useRouter()
@@ -62,7 +76,7 @@ export const RequisitesSetup: React.FC = () => {
             isHidden: false,
             setupUrl_not: null,
         },
-    })
+    }, { skip: !isRussia })
 
     const {
         obj: acquiringContext,
@@ -90,7 +104,9 @@ export const RequisitesSetup: React.FC = () => {
         )
     }, [form, values])
 
-    const acquiringId = get(acquiring, [0, 'id'], null)
+    // NOTE: a skipped query returns a new empty array on every render, so only the item itself is used in hook deps
+    const acquiringIntegration = isRussia ? get(acquiring, 0, null) : get(acquiringContext, 'integration', null)
+    const acquiringId = get(acquiringIntegration, 'id', null)
 
     const createAction = AcquiringIntegrationContextApi.useCreate({
         invoiceStatus: CONTEXT_IN_PROGRESS_STATUS,
@@ -107,6 +123,12 @@ export const RequisitesSetup: React.FC = () => {
 
     const account = Form.useWatch('account', form)
     const bic = Form.useWatch('bic', form)
+    useEffect(() => {
+        if (isRussia || bic) return
+        const bankCode = getBankCodeFromIban(account)
+        if (bankCode) form.setFieldValue('bic', bankCode)
+    }, [account, bic, form, isRussia])
+
     const selectedTaxType = Form.useWatch<typeof TAX_REGIME_GENEGAL | typeof TAX_REGIME_SIMPLE>('taxType', form)
 
     const bankAccountOptions = useMemo<SelectProps['options']>(() => getOptions(bic ? bankAccounts.filter(({ routingNumber }) => routingNumber === bic) : bankAccounts, 'number'), [bankAccounts, bic])
@@ -116,7 +138,7 @@ export const RequisitesSetup: React.FC = () => {
             return [noTaxOption]
         }
 
-        const options = (get(acquiring, [0, 'vatPercentOptions']) || '').split(',').filter((option)=> {
+        const options = (get(acquiringIntegration, 'vatPercentOptions') || '').split(',').filter((option)=> {
             return Boolean(option) && (selectedTaxType === TAX_REGIME_GENEGAL || (selectedTaxType === TAX_REGIME_SIMPLE && option !== '0'))
         }).map((option) => ({
             label: `${option} %`,
@@ -125,7 +147,7 @@ export const RequisitesSetup: React.FC = () => {
         }))
 
         return [noTaxOption, ...options]
-    }, [acquiring, acquiringError, acquiringLoading, noTaxOption, selectedTaxType])
+    }, [acquiringIntegration, acquiringError, acquiringLoading, noTaxOption, selectedTaxType])
 
     const possibleVatOptionsValues: string[] = useMemo(() => {
         if (!selectedTaxType) return []
@@ -133,10 +155,10 @@ export const RequisitesSetup: React.FC = () => {
         if (acquiringLoading || acquiringError) {
             return [null]
         }
-        const vatOptions = (get(acquiring, [0, 'vatPercentOptions']) || '').split(',').filter(Boolean)
+        const vatOptions = (get(acquiringIntegration, 'vatPercentOptions') || '').split(',').filter(Boolean)
 
         return [null, ...selectedTaxType === TAX_REGIME_GENEGAL ? vatOptions : vatOptions.filter((v: string) => v !== '0')]
-    }, [acquiring, acquiringError, acquiringLoading, selectedTaxType])
+    }, [acquiringIntegration, acquiringError, acquiringLoading, selectedTaxType])
 
     useEffect(() => {
         const taxPercent = form.getFieldValue('taxPercent')
@@ -146,16 +168,16 @@ export const RequisitesSetup: React.FC = () => {
     }, [form, possibleVatOptionsValues, selectedTaxType])
 
     useEffect(() => {
-        if (acquiringContext && !acquiringLoading && !!acquiring) {
+        if (acquiringContext && !acquiringLoading) {
             const invoiceVatPercent = get(acquiringContext, 'invoiceVatPercent') || null
             form.setFieldsValue({
                 bic: get(acquiringContext, ['invoiceRecipient', 'bic'], ''),
                 account: get(acquiringContext, ['invoiceRecipient', 'bankAccount'], ''),
-                taxType: get(acquiringContext, 'invoiceTaxRegime'),
+                taxType: get(acquiringContext, 'invoiceTaxRegime') || TAX_REGIME_GENEGAL,
                 taxPercent: invoiceVatPercent ? Number(invoiceVatPercent).toString() : null,
             })
         }
-    }, [form, acquiringContext, acquiringLoading, acquiring])
+    }, [form, acquiringContext, acquiringLoading])
 
     const errorHandler = useMutationErrorHandler({
         form,
@@ -170,7 +192,19 @@ export const RequisitesSetup: React.FC = () => {
             setError(null)
             setIsLoading(true)
             let promise: Promise<AcquiringIntegrationContext>
-            if (acquiringContext) {
+            if (!isRussia) {
+                promise = updateAction({
+                    invoiceStatus: CONTEXT_FINISHED_STATUS,
+                    invoiceRecipient: {
+                        name: get(organization, 'name'),
+                        tin: get(organization, 'tin'),
+                        bic: String(values.bic).trim(),
+                        bankAccount: normalizeAccount(values.account),
+                    },
+                    invoiceTaxRegime: values.taxType,
+                    invoiceVatPercent: values.taxPercent,
+                }, { id: acquiringContext.id })
+            } else if (acquiringContext) {
                 promise = updateAction({
                     invoiceRecipient: {
                         name: get(organization, 'name'),
@@ -198,15 +232,32 @@ export const RequisitesSetup: React.FC = () => {
             }
 
             promise.then(async () => {
-                await router.replace({ query: { step: 1 } }, undefined, { shallow: true })
+                if (isRussia) {
+                    await router.replace({ query: { step: 1 } }, undefined, { shallow: true })
+                } else {
+                    await router.push('/marketplace')
+                }
             }).catch(errorHandler)
 
             setIsLoading(false)
         }
-    }, [acquiringId, acquiringLoading, acquiringError, acquiringContext, errorHandler, updateAction, organization, createAction, orgId, router])
+    }, [acquiringId, acquiringLoading, acquiringError, isRussia, acquiringContext, errorHandler, updateAction, organization, createAction, orgId, router])
 
     if (acquiringContextLoading || acquiringContextError) {
         return <LoadingOrErrorPage loading={acquiringContextLoading} error={acquiringContextError}/>
+    }
+
+    if (!isRussia && !acquiringContext) {
+        return (
+            <Row gutter={VERTICAL_GUTTER}>
+                <Col sm={13} span={24}>
+                    <Space direction='vertical' size={24}>
+                        <Alert showIcon type='info' message={NoAcquiringTitle} description={NoAcquiringDescription}/>
+                        <Button type='primary' onClick={() => router.push('/settings/acquiring')}>{NoAcquiringButton}</Button>
+                    </Space>
+                </Col>
+            </Row>
+        )
     }
 
     return (
@@ -259,7 +310,7 @@ export const RequisitesSetup: React.FC = () => {
                                 required
                                 labelCol={LABEL_COL}
                                 labelAlign='left'
-                                rules={routingNumberValidator}
+                                rules={isRussia ? routingNumberValidator : [requiredValidator]}
                             >
                                 <AutoComplete allowClear filterOption options={bicOptions}/>
                             </Form.Item>
@@ -300,7 +351,7 @@ export const RequisitesSetup: React.FC = () => {
                                 <Space size={16}>
                                     <Button type='primary' key='submit' htmlType='submit' loading={loading}
                                         disabled={!submittable}>
-                                        {NextButtonLabel}
+                                        {isRussia ? NextButtonLabel : SaveButtonLabel}
                                     </Button>
                                 </Space>
                             </Row>

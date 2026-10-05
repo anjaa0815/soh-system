@@ -4,11 +4,9 @@
 
 const isEmpty = require('lodash/isEmpty')
 
-const { GQLError } = require('@open-condo/keystone/errors')
 const { GQLCustomSchema, find, itemsQuery } = require('@open-condo/keystone/schema')
 
 const access = require('@condo/domains/onboarding/access/SyncTourStepsService')
-const { SYNC_TOUR_STEPS_ERRORS } = require('@condo/domains/onboarding/constants/errors')
 const {
     CREATE_PROPERTY_STEP_TYPE,
     CREATE_PROPERTY_MAP_STEP_TYPE,
@@ -19,7 +17,7 @@ const {
     CREATE_METER_READINGS_STEP_TYPE,
     CREATE_NEWS_STEP_TYPE,
 } = require('@condo/domains/onboarding/constants/steps')
-const { TourStep } = require('@condo/domains/onboarding/utils/serverSchema')
+const { TourStep, createTourStepsForOrganization } = require('@condo/domains/onboarding/utils/serverSchema')
 
 
 const SyncTourStepsService = new GQLCustomSchema('SyncTourStepsService', {
@@ -47,10 +45,16 @@ const SyncTourStepsService = new GQLCustomSchema('SyncTourStepsService', {
                     organization: { id: organizationId },
                     deletedAt: null,
                 }
-                const tourSteps = await find('TourStep', defaultOrganizationQuery)
+                let tourSteps = await find('TourStep', defaultOrganizationQuery)
 
+                // Organizations created outside of registerNewOrganization (e.g. by scripts) have no steps,
+                // which leaves the tour page empty, so the steps are created here
                 if (tourSteps.length === 0) {
-                    throw new GQLError(SYNC_TOUR_STEPS_ERRORS.TOUR_STEPS_NOT_FOUND, context)
+                    await createTourStepsForOrganization(context, { id: organizationId }, {
+                        dv: 1,
+                        sender: { fingerprint: 'sync-tour-steps', dv: 1 },
+                    })
+                    tourSteps = await find('TourStep', defaultOrganizationQuery)
                 }
 
                 const stepToItemsQuery = {
