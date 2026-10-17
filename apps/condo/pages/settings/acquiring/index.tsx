@@ -50,7 +50,8 @@ const AcquiringSettingsPage: PageComponentType = () => {
     })
 
     const { objs: contexts, loading: contextsLoading, refetch: refetchContexts } = AcquiringIntegrationContext.useObjects({
-        where: { organization: { id: orgId }, deletedAt: null },
+        // NOTE: only the online providers listed here, not hidden internal ones (e.g. the cash payments context)
+        where: { organization: { id: orgId }, deletedAt: null, integration: { name_in: Object.values(PROVIDER_NAMES) } },
     })
 
     const activeContext = contexts[0] || null
