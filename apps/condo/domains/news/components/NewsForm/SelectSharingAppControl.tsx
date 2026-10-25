@@ -38,10 +38,10 @@ const CARD_ICON_CONTAINER_STYLE: CSSProperties = {
 }
 
 const CONDO_APP_ICON_URL = '/homeWithSun.svg'
-const CONDO_APP_PREVIEW_ICON_URL = '/news/condoAppPreviewIcon.png'
+// Previews with baked-in text, only ru (default) and mn versions exist
+const getPreviewIconUrl = (name: string, locale: string) => `/news/${name}${locale === 'mn' ? '-mn' : ''}.png`
 const SHARING_APP_FALLBACK_ICON = '/news/sharingAppIconPlaceholder.svg'
 const SHARING_APP_FALLBACK_PREVIEW_ICON = '/news/sharingAppPreviewIconPlaceholder.svg'
-const PROMO_APP_PREVIEW_ICON = '/news/promoAppPreviewIcon.png'
 const CardCheckbox = Card.CardCheckbox
 
 interface ISelectSharingAppControl {
@@ -55,6 +55,8 @@ const FinishSettingDescriptionLabelId = 'pages.news.create.selectSharingApp.fini
 
 const SelectSharingAppControl: React.FC<ISelectSharingAppControl> = ({ sharingAppContexts, selectedSharingApps, handleSelectSharingApp }) => {
     const intl = useIntl()
+    const CONDO_APP_PREVIEW_ICON_URL = getPreviewIconUrl('condoAppPreviewIcon', intl.locale)
+    const PROMO_APP_PREVIEW_ICON = getPreviewIconUrl('promoAppPreviewIcon', intl.locale)
     const CondoMobileAppDescriptionLabel = intl.formatMessage({ id: AppDescriptionLabelId }, { appName: 'Doma' })
     const OtherAppsDescriptionLabel = intl.formatMessage({ id: 'pages.news.create.selectSharingApp.otherApps.description' })
     const OtherAppsActionLabel = intl.formatMessage({ id: 'InMoreDetail' })

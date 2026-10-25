@@ -2,6 +2,27 @@ const { faker } = require('@faker-js/faker')
 
 const { AddressFromStringParser } = require('@open-condo/clients/address-service-client/utils')
 
+// "<address> @ <lat>,<lon>": an address picked on a map (see PropertyMapPicker in condo)
+// "<address> #key:<addressKey>": the address of an existing Property (see MonthlyChargesService in condo).
+// Keeps its addressKey, as this fake client forgets the address keys it generated on every restart.
+const ADDRESS_WITH_KEY_REGEXP = /^(.+?)\s*#key:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+const ADDRESS_WITH_COORDINATES_REGEXP = /^(.+?)\s*@\s*(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)$/
+
+/**
+ * "City, district, khoroo, street 5" -> city / "district, khoroo" / "street 5" (house),
+ * so that the address renders naturally instead of fake region and house parts
+ * @param {string} address
+ * @returns {{ city: string|null, street: string|null, house: string }}
+ */
+function splitAddress (address) {
+    const parts = address.split(',').map((part) => part.trim()).filter(Boolean)
+    return {
+        city: parts.length > 1 ? parts[0] : null,
+        street: parts.length > 2 ? parts.slice(1, -1).join(', ') : null,
+        house: parts.length > 1 ? parts[parts.length - 1] : address,
+    }
+}
+
 class FakeAddressServiceClient {
     addressKeysToSearchResultsMapping = new Map()
     addressSourcesToAddressKeyMapping = new Map()
@@ -29,7 +50,28 @@ class FakeAddressServiceClient {
             }
         }
 
-        if (this.addressSourcesToAddressKeyMapping.has(address)) {
+        let geoLat = null, geoLon = null
+        if (ADDRESS_WITH_COORDINATES_REGEXP.test(address)) {
+            const [, addressWithoutCoordinates, lat, lon] = ADDRESS_WITH_COORDINATES_REGEXP.exec(address)
+            address = addressWithoutCoordinates
+            geoLat = lat
+            geoLon = lon
+        }
+
+        let knownAddressKey = null
+        if (ADDRESS_WITH_KEY_REGEXP.test(address)) {
+            const [, addressWithoutKey, key] = ADDRESS_WITH_KEY_REGEXP.exec(address)
+            address = addressWithoutKey
+            knownAddressKey = key.toLowerCase()
+            if (this.addressKeysToSearchResultsMapping.has(knownAddressKey)) {
+                const searchResult = this.addressKeysToSearchResultsMapping.get(knownAddressKey)
+                if (!searchResult.addressSources.includes(s)) searchResult.addressSources.push(s)
+                this.addressSourcesToAddressKeyMapping.set(s, knownAddressKey)
+                return { ...searchResult, unitType, unitName }
+            }
+        }
+
+        if (!knownAddressKey && this.addressSourcesToAddressKeyMapping.has(address)) {
             return {
                 ...this.addressKeysToSearchResultsMapping.get(this.addressSourcesToAddressKeyMapping.get(address)),
                 unitType,
@@ -51,10 +93,13 @@ class FakeAddressServiceClient {
             }
         }
 
-        const addressKey = faker.datatype.uuid()
+        const addressKey = knownAddressKey || faker.datatype.uuid()
+
+        const { city, street, house } = splitAddress(address)
 
         const fiasId = faker.datatype.uuid()
         const addressSources = [address, `fiasId:${fiasId}`, `key:${addressKey}`]
+        if (s !== address) addressSources.push(s)
         const searchResult = {
             addressSources,
             address,
@@ -62,7 +107,7 @@ class FakeAddressServiceClient {
             addressMeta: {
                 data: {
                     postal_code: null,
-                    country: faker.address.country(),
+                    country: city ? 'Монгол' : faker.address.country(),
                     country_iso_code: null,
                     federal_district: null,
                     region_fias_id: null,
@@ -71,7 +116,7 @@ class FakeAddressServiceClient {
                     region_with_type: null,
                     region_type: null,
                     region_type_full: null,
-                    region: faker.address.state(),
+                    region: city || faker.address.state(),
                     area_fias_id: null,
                     area_kladr_id: null,
                     area_with_type: null,
@@ -80,10 +125,10 @@ class FakeAddressServiceClient {
                     area: null,
                     city_fias_id: null,
                     city_kladr_id: null,
-                    city_with_type: null,
+                    city_with_type: city,
                     city_type: null,
                     city_type_full: null,
-                    city: null,
+                    city,
                     city_area: null,
                     city_district_fias_id: null,
                     city_district_kladr_id: null,
@@ -99,15 +144,15 @@ class FakeAddressServiceClient {
                     settlement: null,
                     street_fias_id: null,
                     street_kladr_id: null,
-                    street_with_type: null,
+                    street_with_type: street,
                     street_type: null,
                     street_type_full: null,
                     street: null,
                     house_fias_id: fiasId,
                     house_kladr_id: null,
-                    house_type: 'д',
+                    house_type: city ? null : 'д',
                     house_type_full: 'дом',
-                    house: null,
+                    house: city ? house : null,
                     block_type: null,
                     block_type_full: null,
                     block: null,
@@ -133,8 +178,8 @@ class FakeAddressServiceClient {
                     tax_office: null,
                     tax_office_legal: null,
                     timezone: null,
-                    geo_lat: null,
-                    geo_lon: null,
+                    geo_lat: geoLat,
+                    geo_lon: geoLon,
                     beltway_hit: null,
                     beltway_distance: null,
                     metro: null,
@@ -187,4 +232,4 @@ class FakeAddressServiceClient {
     }
 }
 
-module.exports = { FakeAddressServiceClient }
+module.exports = { FakeAddressServiceClient, splitAddress }

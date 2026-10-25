@@ -36,14 +36,15 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onCancel, open }) =>
             }
         >
             <Row gutter={WELCOME_MODAL_PIC_GAP}>
-                <Col span={24}>
+                {/* The picture is a screenshot of the russian interface */}
+                {intl.locale === 'ru' && (<Col span={24}>
                     <Image
                         src={WELCOME_MODAL_PIC_SRC}
                         preview={false}
                         style={WELCOME_MODAL_PIC_STYLE}
                         alt='Billing welcome picture'
                     />
-                </Col>
+                </Col>)}
                 <Col span={24}>
                     <Space size={WELCOME_MODAL_TEXT_GAP} direction='vertical'>
                         <Typography.Title level={3}>

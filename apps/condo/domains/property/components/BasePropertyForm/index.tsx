@@ -2,7 +2,8 @@ import { Col, Form, FormInstance, notification, Row } from 'antd'
 import dayjs from 'dayjs'
 import get from 'lodash/get'
 import isEmpty from 'lodash/isEmpty'
-import React, { useCallback, useMemo, useState } from 'react'
+import getConfig from 'next/config'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 
 import { omitRecursively } from '@open-condo/keystone/fields/Json/utils/cleaner'
 import { useIntl } from '@open-condo/next/intl'
@@ -16,6 +17,7 @@ import { useValidations } from '@condo/domains/common/hooks/useValidations'
 import { MeterReportingPeriod } from '@condo/domains/meter/utils/clientSchema'
 import { AddressSuggestionsSearchInput } from '@condo/domains/property/components/AddressSuggestionsSearchInput'
 import { TSelectedAddressSuggestion } from '@condo/domains/property/components/BasePropertyForm/types'
+import { PropertyMapPicker } from '@condo/domains/property/components/PropertyMapPicker'
 import { usePropertyValidations } from '@condo/domains/property/hooks/usePropertyValidations'
 import { IPropertyFormState } from '@condo/domains/property/utils/clientSchema/Property'
 
@@ -35,6 +37,12 @@ interface IPropertyFormProps {
     ) => React.ReactElement
     mode: 'create' | 'update'
 }
+
+const {
+    publicRuntimeConfig: { addressServiceUrl },
+} = getConfig()
+// Without an address service there are no address suggestions, so the address is picked on a map instead
+const IS_MAP_ADDRESS_MODE = !addressServiceUrl
 
 const FORM_WITH_ACTION_VALIDATION_TRIGGERS = ['onBlur', 'onSubmit']
 const SMALL_INPUT_WRAPPER_COL = {
@@ -60,6 +68,7 @@ const BasePropertyForm: React.FC<IPropertyFormProps> = (props) => {
     const PromptHelpMessage = intl.formatMessage({ id: 'pages.condo.property.warning.modal.HelpMessage' })
     const AddressValidationErrorMsg = intl.formatMessage({ id: 'pages.condo.property.warning.modal.AddressValidationErrorMsg' })
     const OperationCompletedTitle = intl.formatMessage({ id: 'OperationCompleted' })
+    const MapLabel = intl.formatMessage({ id: 'pages.condo.property.form.map.Label' })
 
     const { breakpoints } = useLayoutContext()
     const { addressApi } = useAddressApi()
@@ -69,6 +78,7 @@ const BasePropertyForm: React.FC<IPropertyFormProps> = (props) => {
 
     const organizationId = get(organization, 'id')
     const [addressValidatorError, setAddressValidatorError] = useState<string | null>(null)
+    const pickedCoordinatesRef = useRef<{ lat: number, lon: number } | null>(null)
 
     const {
         loading: isPeriodsLoading,
@@ -94,6 +104,15 @@ const BasePropertyForm: React.FC<IPropertyFormProps> = (props) => {
             : null
         // TODO (DOMA-1725) Replace it with better parsing
         const area = formData.area ? formData.area.replace(',', '.') : null
+
+        if (isAddressFieldTouched && IS_MAP_ADDRESS_MODE) {
+            // The address client stores "<address> @ <lat>,<lon>" as the address with coordinates
+            const coordinates = pickedCoordinatesRef.current
+            const address = coordinates
+                ? `${formData.address.trim()} @ ${coordinates.lat.toFixed(6)},${coordinates.lon.toFixed(6)}`
+                : formData.address.trim()
+            return { ...formData, address, yearOfConstruction, area }
+        }
 
         if (isAddressFieldTouched) {
             try {
@@ -195,14 +214,36 @@ const BasePropertyForm: React.FC<IPropertyFormProps> = (props) => {
                                                 label={AddressLabel}
                                                 rules={validations.address}
                                             >
-                                                <AddressSuggestionsSearchInput
-                                                    placeholder={AddressTitle}
-                                                    addressValidatorError={addressValidatorError}
-                                                    setAddressValidatorError={setAddressValidatorError}
-                                                    onSelect={onSuggestionSelected}
-                                                    onChange={() => setCurrentStep(0)}
-                                                />
+                                                {IS_MAP_ADDRESS_MODE ? (
+                                                    <Input
+                                                        allowClear={true}
+                                                        placeholder={AddressTitle}
+                                                    />
+                                                ) : (
+                                                    <AddressSuggestionsSearchInput
+                                                        placeholder={AddressTitle}
+                                                        addressValidatorError={addressValidatorError}
+                                                        setAddressValidatorError={setAddressValidatorError}
+                                                        onSelect={onSuggestionSelected}
+                                                        onChange={() => setCurrentStep(0)}
+                                                    />
+                                                )}
                                             </Form.Item>
+                                            {IS_MAP_ADDRESS_MODE && (
+                                                <Form.Item label={MapLabel}>
+                                                    <PropertyMapPicker
+                                                        onPick={({ address, name, lat, lon }) => {
+                                                            pickedCoordinatesRef.current = { lat, lon }
+                                                            form.setFields([
+                                                                { name: 'address', value: address, touched: true },
+                                                                ...(name && !form.getFieldValue('name') ? [{ name: 'name', value: name, touched: true }] : []),
+                                                            ])
+                                                            form.validateFields(['address'])
+                                                            setCurrentStep(1)
+                                                        }}
+                                                    />
+                                                </Form.Item>
+                                            )}
                                             <Form.Item
                                                 name='map'
                                                 hidden

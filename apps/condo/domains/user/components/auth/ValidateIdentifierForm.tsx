@@ -5,11 +5,13 @@ import {
     useResendConfirmEmailActionMutation,
 } from '@app/condo/gql'
 import { Col, Form, Row } from 'antd'
+import { gql } from 'graphql-tag'
 import getConfig from 'next/config'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowLeft } from '@open-condo/icons'
 import { getClientSideSenderInfo } from '@open-condo/miniapp-utils'
+import { useQuery } from '@open-condo/next/apollo'
 import { useIntl } from '@open-condo/next/intl'
 import { Typography, Input, Space, Modal, Button } from '@open-condo/ui'
 
@@ -31,6 +33,7 @@ import {
 
 import { useRegisterContext } from './RegisterContextProvider'
 import { SecondaryLink } from './SecondaryLink'
+import { VerifyMnPhoneConfirm, VerifyMnSession } from './VerifyMnPhoneConfirm'
 
 import type { FetchResult } from '@apollo/client/link/core'
 import type { CompleteConfirmEmailActionMutation, CompleteConfirmPhoneActionMutation } from '@app/condo/gql'
@@ -48,6 +51,13 @@ type ValidateIdentifierFormProps = {
 }
 
 const INITIAL_VALUES = { confirmCode: '' }
+const VERIFY_MN_POLL_INTERVAL = 3000
+
+const GET_VERIFY_MN_SESSION = gql`
+    query getConfirmPhoneActionVerifyMnSession ($data: GetConfirmPhoneActionVerifyMnSessionInput!) {
+        result: getConfirmPhoneActionVerifyMnSession(data: $data) { shortcode text smsUri displayInstruction status }
+    }
+`
 
 export const ValidateIdentifierForm: React.FC<ValidateIdentifierFormProps> = ({ onFinish, onReset, title }) => {
     const intl = useIntl()
@@ -109,6 +119,20 @@ export const ValidateIdentifierForm: React.FC<ValidateIdentifierFormProps> = ({ 
         onError: errorHandler,
     })
 
+    // Phones may be verified with Verify.MN: the user sends the code by SMS instead of typing it in
+    const { data: verifyMnData, refetch: refetchVerifyMnSession, stopPolling } = useQuery(GET_VERIFY_MN_SESSION, {
+        variables: { data: { token } },
+        skip: identifierType !== 'phone' || !token,
+        pollInterval: VERIFY_MN_POLL_INTERVAL,
+        fetchPolicy: 'network-only',
+    })
+    const verifyMnSession: VerifyMnSession | null = verifyMnData?.result || null
+    const isVerifyMnCompletingRef = useRef(false)
+
+    useEffect(() => {
+        if (verifyMnData && !verifyMnData.result) stopPolling()
+    }, [stopPolling, verifyMnData])
+
     const confirmCodeValidator = useCallback(() => ({
         validator () {
             if (!confirmCodeError) {
@@ -139,11 +163,12 @@ export const ValidateIdentifierForm: React.FC<ValidateIdentifierFormProps> = ({ 
                     },
                 },
             })
+            if (identifierType === 'phone') await refetchVerifyMnSession()
         } catch (error) {
             console.error('Code resending error')
             console.error(error)
         }
-    }, [executeCaptcha, identifierType, resendConfirmEmailMutation, resendSmsMutation, token])
+    }, [executeCaptcha, identifierType, refetchVerifyMnSession, resendConfirmEmailMutation, resendSmsMutation, token])
 
     const handleVerifyCode = useCallback(async () => {
         setConfirmCodeError(null)
@@ -222,6 +247,30 @@ export const ValidateIdentifierForm: React.FC<ValidateIdentifierFormProps> = ({ 
         }
     }, [completeConfirmEmailMutation, completeConfirmPhoneMutation, ConfirmCodeMismatchError, executeCaptcha, form, identifierType, onFinish, SmsCodeMismatchError, token])
 
+    useEffect(() => {
+        if (verifyMnSession?.status !== 'VERIFIED' || isVerifyMnCompletingRef.current) return
+        isVerifyMnCompletingRef.current = true
+        stopPolling()
+        const completeVerifyMn = async () => {
+            try {
+                const sender = getClientSideSenderInfo()
+                const captcha = await executeCaptcha()
+                const res = await completeConfirmPhoneMutation({
+                    variables: { data: { dv: 1, sender, captcha, token, smsCode: Number(verifyMnSession.text) } },
+                })
+                if (!res.errors && res?.data?.result?.status === 'ok') {
+                    onFinish()
+                    return
+                }
+            } catch (error) {
+                console.error('Verification error')
+                console.error(error)
+            }
+            isVerifyMnCompletingRef.current = false
+        }
+        completeVerifyMn()
+    }, [completeConfirmPhoneMutation, executeCaptcha, onFinish, stopPolling, token, verifyMnSession])
+
     const closeModal = useCallback(() => setIsOpenProblemsModal(false), [])
 
     const openModal = useCallback(() => setIsOpenProblemsModal(true), [])
@@ -250,28 +299,34 @@ export const ValidateIdentifierForm: React.FC<ValidateIdentifierFormProps> = ({ 
                                             <Typography.Title level={2}>{title}</Typography.Title>
                                         </Space>
                                     </Col>
-                                    <Col span={24}>
-                                        <Typography.Text type='secondary'>
-                                            {identifierType === 'email' ? EmailCodeSentMessage : SmsCodeSentMessage}
-                                        </Typography.Text>
-                                    </Col>
-                                    <Col span={24}>
-                                        <FormItem
-                                            name='confirmCode'
-                                            label=' '
-                                            data-cy='register-confirm-code-item'
-                                            rules={confirmCodeValidatorRules}
-                                        >
-                                            <Input
-                                                placeholder=''
-                                                inputMode={identifierType === 'email' ? 'text' : 'numeric'}
-                                                pattern={identifierType === 'email' ? undefined : '[0-9]'}
-                                                onChange={handleVerifyCode}
-                                                tabIndex={1}
-                                                autoFocus
-                                            />
-                                        </FormItem>
-                                    </Col>
+                                    {verifyMnSession ? (
+                                        <Col span={24}>
+                                            <VerifyMnPhoneConfirm session={verifyMnSession} />
+                                        </Col>
+                                    ) : (<>
+                                        <Col span={24}>
+                                            <Typography.Text type='secondary'>
+                                                {identifierType === 'email' ? EmailCodeSentMessage : SmsCodeSentMessage}
+                                            </Typography.Text>
+                                        </Col>
+                                        <Col span={24}>
+                                            <FormItem
+                                                name='confirmCode'
+                                                label=' '
+                                                data-cy='register-confirm-code-item'
+                                                rules={confirmCodeValidatorRules}
+                                            >
+                                                <Input
+                                                    placeholder=''
+                                                    inputMode={identifierType === 'email' ? 'text' : 'numeric'}
+                                                    pattern={identifierType === 'email' ? undefined : '[0-9]'}
+                                                    onChange={handleVerifyCode}
+                                                    tabIndex={1}
+                                                    autoFocus
+                                                />
+                                            </FormItem>
+                                        </Col>
+                                    </>)}
                                 </Row>
                             </Col>
 

@@ -171,6 +171,7 @@ const MobilePreview: React.FC<IMobilePreviewProps> = ({ name, price, measure, pr
     const MobilePreviewTitle = intl.formatMessage({ id: 'pages.condo.marketplace.marketItem.mobileAppPreview.title' })
     const ContractPrice = intl.formatMessage({ id: 'pages.condo.marketplace.invoice.form.contractPrice' })
     const SkuMessage = intl.formatMessage({ id: 'pages.condo.marketplace.marketItem.mobileAppPreview.sku' })
+    const TotalMessage = intl.formatMessage({ id: 'acquiringReceipt.total' })
     const NameMessage = intl.formatMessage({ id: 'pages.condo.marketplace.marketItem.mobileAppPreview.name' })
     const PriceMessage = intl.formatMessage({ id: 'pages.condo.marketplace.marketItem.mobileAppPreview.price' })
     const OrderMessage = intl.formatMessage({ id: 'pages.condo.marketplace.marketItem.mobileAppPreview.order' })
@@ -250,7 +251,7 @@ const MobilePreview: React.FC<IMobilePreviewProps> = ({ name, price, measure, pr
                                     borderRadius: DEFAULT_BORDER_RADIUS,
                                 }}>
                                     <div style={{ 'marginTop': '-2px' }}>
-                                        <Typography.Text size='small' type='secondary'>итого</Typography.Text>
+                                        <Typography.Text size='small' type='secondary'>{TotalMessage.toLowerCase()}</Typography.Text>
                                         <div style={{ 'marginTop': '-6px' }}>
                                             <Typography.Text strong size='medium' type='inherit'>{resultPrice || PriceMessage}</Typography.Text>
                                         </div>

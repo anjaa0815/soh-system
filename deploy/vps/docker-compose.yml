@@ -1,0 +1,64 @@
+# Single-VM deployment: postgres, redis, the prebuilt condo image and caddy (https) in front of it.
+# Needs at least 4GB RAM — the app alone exceeds 640MB of heap while loading.
+name: hutoch
+
+services:
+  postgres:
+    image: postgres:16.8
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: condo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: condo
+    command: postgres -c shared_buffers=64MB -c max_connections=40
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U condo"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 96mb
+    volumes:
+      - redisdata:/data
+
+  condo:
+    image: ghcr.io/anjaa0815/soh-system-condo:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=${NODE_HEAP_MB:-2048}
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${DOMAIN:-:80}
+      WWW_ADDRESS: ${WWW_DOMAIN:-:8081}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - condo
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:

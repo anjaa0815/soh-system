@@ -1,6 +1,15 @@
 :root {
   --side-menu-width: 256px;
   --collapsed-side-menu-width: 92px;
+
+  /* App theme: the only place to change app-level colors (dark theme will override these) */
+  --app-bg: #f3f6fb;
+  --app-surface: var(--condo-global-color-white);
+  --app-surface-shadow: 0 4px 24px rgb(34 34 34 / 6%);
+  --app-sider-bg: linear-gradient(180deg, #e7f7ee 0%, #e9f1fd 60%, #eef0fb 100%);
+  --app-menu-hover-bg: rgb(255 255 255 / 50%);
+  --app-menu-active-bg: var(--condo-global-color-white);
+  --app-menu-active-icon: var(--condo-global-color-green-5);
 }
 
 /* Side-menu */
@@ -11,9 +20,8 @@
   box-sizing: border-box;
   height: 100vh;
   padding: 28px 0 0;
-  border-color: var(--condo-global-color-gray-3);
-  border-style: solid;
-  border-width: 0 1px 0 0;
+  background: var(--app-sider-bg);
+  border: none;
 }
 
 /* Hide desktop menu and placeholder on mobile */
@@ -31,6 +39,7 @@
   height: 100vh;
   padding: 16px 0 60px;
   overflow-y: scroll;
+  background: var(--app-sider-bg);
 }
 
 /* Hide mobile menu on desktop */
@@ -116,7 +125,7 @@
   height: 84px;
   padding: 24px 40px 12px;
   line-height: 1.5;
-  background: var(--condo-global-color-white);
+  background: transparent;
 }
 
 .desktop-header .top-menu-items {

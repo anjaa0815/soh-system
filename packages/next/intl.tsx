@@ -52,8 +52,7 @@ let getMessages: GetMessages = async (locale) => {
 let extractReqLocale: ExtractReqLocale = (req) => {
     try {
         const cookieLocale = nextCookie({ req }).locale
-        const headersLocale = req.headers['accept-language'] && req.headers['accept-language'].slice(0, 2)
-        return cookieLocale || headersLocale || defaultLocale
+        return cookieLocale || defaultLocale
     } catch (e) {
         return null
     }
@@ -63,10 +62,8 @@ let getLocale: GetLocale = () => {
     let locale = null
     if (typeof window !== 'undefined') {
         try {
+            // NOTE: navigator.language is deliberately not used, defaultLocale wins (see @open-condo/locales/extractReqLocale)
             locale = cookie.get('locale')
-            if (!locale && navigator) {
-                locale = navigator.language.slice(0, 2)
-            }
         } catch (e) {
             locale = null
         }

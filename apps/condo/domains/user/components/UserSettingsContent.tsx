@@ -67,6 +67,7 @@ export const UserSettingsContent: React.FC = () => {
     const RuTitle = intl.formatMessage({ id: 'language.russian.withFlag' })
     const EnTitle = intl.formatMessage({ id: 'language.english-us.withFlag' })
     const EsTitle = intl.formatMessage({ id: 'language.spanish-es.withFlag' })
+    const MnTitle = intl.formatMessage({ id: 'language.mongolian.withFlag' })
 
     const { user, refetch } = useAuth()
 
@@ -162,7 +163,8 @@ export const UserSettingsContent: React.FC = () => {
         { label: RuTitle, value: 'ru' },
         { label: EnTitle, value: 'en' },
         { label: EsTitle, value: 'es' },
-    ]), [EnTitle, RuTitle, EsTitle])
+        { label: MnTitle, value: 'mn' },
+    ]), [EnTitle, RuTitle, EsTitle, MnTitle])
 
     const is2FADisabled = !user?.isTwoFactorAuthenticationEnabled
         && (

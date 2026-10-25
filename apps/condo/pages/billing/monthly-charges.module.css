@@ -1,0 +1,20 @@
+.tariff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.bank-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  max-width: 720px;
+}
+
+@media (max-width: 767px) {
+  .tariff-row,
+  .bank-row {
+    grid-template-columns: 1fr;
+  }
+}

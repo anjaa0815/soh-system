@@ -539,6 +539,7 @@ export type AiSkillHistoryRecordsUpdateInput = {
 export enum AiSkillLocaleType {
   En = 'en',
   Es = 'es',
+  Mn = 'mn',
   Ru = 'ru'
 }
 
@@ -31011,6 +31012,7 @@ export type ExecutionAiFlowTaskHistoryRecordsUpdateInput = {
 export enum ExecutionAiFlowTaskLocaleType {
   En = 'en',
   Es = 'es',
+  Mn = 'mn',
   Ru = 'ru'
 }
 
@@ -120085,6 +120087,7 @@ export type UserHistoryRecordsUpdateInput = {
 export enum UserLocaleType {
   En = 'en',
   Es = 'es',
+  Mn = 'mn',
   Ru = 'ru'
 }
 

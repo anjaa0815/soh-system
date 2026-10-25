@@ -3,11 +3,13 @@ const get = require('lodash/get')
 const conf = require('@open-condo/config')
 const { getLogger } = require('@open-condo/keystone/logging')
 
-const { DADATA_PROVIDER, GOOGLE_PROVIDER, PULLENTI_PROVIDER } = require('@address-service/domains/common/constants/providers')
+const { DADATA_PROVIDER, GOOGLE_PROVIDER, PULLENTI_PROVIDER, ZIPCODE_MN_PROVIDER } = require('@address-service/domains/common/constants/providers')
 const {
+    ChainedSearchProvider,
     DadataSearchProvider,
     GoogleSearchProvider,
     PullentiSearchProvider,
+    ZipcodeMnSearchProvider,
 } = require('@address-service/domains/common/utils/services/search/providers')
 const {
     GoogleSuggestionProvider,
@@ -19,32 +21,59 @@ const {
 /**
  * @typedef {Object} ProviderDetectorArgs
  * @property {IncomingMessage & {id: String}} [req] Express request object
- * @property {string} [provider] Explicit provider name, takes priority over req and conf
+ * @property {string} [provider] Explicit provider name (or comma-separated names for a fallback
+ * chain, e.g. "zipcode_mn,google"), takes priority over req and conf
  */
+
+/**
+ * @param {string} name
+ * @param {ProviderDetectorArgs} args
+ * @returns {AbstractSearchProvider|undefined}
+ */
+function instantiateSearchProvider (name, args) {
+    switch (name) {
+        case DADATA_PROVIDER:
+            return new DadataSearchProvider(args)
+        case GOOGLE_PROVIDER:
+            return new GoogleSearchProvider(args)
+        case PULLENTI_PROVIDER:
+            return new PullentiSearchProvider(args)
+        case ZIPCODE_MN_PROVIDER:
+            return new ZipcodeMnSearchProvider(args)
+        default:
+            return undefined
+    }
+}
 
 /**
  * @param {ProviderDetectorArgs} args
  * @returns {AbstractSearchProvider|undefined}
  */
 function getSearchProvider (args) {
-    const provider = args?.provider || args?.req?.query?.provider || args?.req?.body?.provider || get(conf, 'PROVIDER')
+    const providerConf = args?.provider || args?.req?.query?.provider || args?.req?.body?.provider || get(conf, 'PROVIDER')
+    const names = String(providerConf || '').split(',').map((name) => name.trim()).filter(Boolean)
 
-    /** @type {AbstractSearchProvider|undefined} */
-    let searchProvider
+    if (names.length === 0) return undefined
 
-    switch (provider) {
-        case DADATA_PROVIDER:
-            searchProvider = new DadataSearchProvider(args)
-            break
-        case GOOGLE_PROVIDER:
-            searchProvider = new GoogleSearchProvider(args)
-            break
-        case PULLENTI_PROVIDER:
-            searchProvider = new PullentiSearchProvider(args)
-            break
+    if (names.length === 1) {
+        return instantiateSearchProvider(names[0], args)
     }
 
-    return searchProvider
+    const providers = names
+        .map((name) => {
+            try {
+                return instantiateSearchProvider(name, args)
+            } catch (err) {
+                getLogger('providerDetectors').warn({ msg: 'skipping misconfigured provider in chain', name, err })
+                return undefined
+            }
+        })
+        .filter(Boolean)
+
+    if (providers.length === 0) return undefined
+    if (providers.length === 1) return providers[0]
+
+    return new ChainedSearchProvider(args, providers)
 }
 
 /**

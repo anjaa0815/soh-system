@@ -11,7 +11,7 @@ import { Paperclip } from '@open-condo/icons'
 import { getClientSideSenderInfo } from '@open-condo/miniapp-utils/helpers/sender'
 import { useAuth } from '@open-condo/next/auth'
 import { useIntl } from '@open-condo/next/intl'
-import { Button, Modal, Typography, Space } from '@open-condo/ui'
+import { Button, Checkbox, Modal, Typography, Space } from '@open-condo/ui'
 
 import { FormWithAction } from '@condo/domains/common/components/containers/FormList'
 import { StyledUpload } from '@condo/domains/common/components/MultipleFileUpload'
@@ -53,6 +53,7 @@ const UploadDocumentsModal = ({
     const FileTooBigErrorMessage = intl.formatMessage({ id: 'component.uploadlist.error.FileTooBig' }, {
         maxSizeInMb: MAX_FILE_SIZE_IN_MB,
     })
+    const CanReadByResidentMessage = intl.formatMessage({ id: 'documents.canReadByResident.message' })
     const CancelButtonMessage = intl.formatMessage({ id: 'documents.uploadDocumentsModal.cancelButton' })
     const CancelModalTitle = intl.formatMessage({ id: 'documents.uploadDocumentsModal.cancel.title' })
     const CancelModalMessage = intl.formatMessage({ id: 'documents.uploadDocumentsModal.cancel.message' })
@@ -280,6 +281,13 @@ const UploadDocumentsModal = ({
                                 </Button>
                             </StyledUpload>
                         </Space>
+                        <Form.Item name='canReadByResident' valuePropName='checked' initialValue={false}>
+                            <Checkbox id='document-can-read-by-resident'>
+                                <Typography.Text>
+                                    {CanReadByResidentMessage}
+                                </Typography.Text>
+                            </Checkbox>
+                        </Form.Item>
                     </Space>
                 </Modal>
             </FormWithAction>
