@@ -307,15 +307,16 @@
 }
 
 .map-unit-button {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
+  width: 52px;
+  min-width: 52px;
+  height: 52px;
   margin-top: 8px;
   margin-right: 8px;
   padding: 0 8px;
   color: var(--condo-global-color-black);
   background-color: var(--condo-global-color-white);
-  border: 1px solid var(--condo-global-color-gray-1);
+  border: 1px solid var(--condo-global-color-gray-3);
+  border-radius: 12px;
   transition: var(--condo-global-transition-duration-default);
 }
 
@@ -368,6 +369,7 @@
 .condo-btn.map-unit-button.map-unit-button-selected {
   background: var(--condo-global-color-brand-gradient-1);
   border-color: var(--condo-global-color-green-5);
+  box-shadow: 0 0 0 2px var(--condo-global-color-green-5), 0 4px 12px rgb(43 195 89 / 30%);
 }
 
 .condo-btn.map-unit-button > .condo-btn-text:hover,
@@ -379,6 +381,7 @@
 .condo-btn.map-unit-button.map-unit-button-selected:hover > .condo-btn-text,
 .condo-btn.map-unit-button.map-unit-button-selected:focus > .condo-btn-text {
   color: var(--condo-global-color-green-7);
+  font-weight: 600;
 }
 
 .map-preview-unit-button {
@@ -398,17 +401,20 @@
 
 .map-unit-button.map-apartment-unit-button,
 .map-unit-button.map-apartment-unit-button:hover {
-  background-color: #cbe2f6;
+  background-color: var(--condo-global-color-blue-1);
+  border-color: var(--condo-global-color-blue-3);
 }
 
 .map-unit-button.map-warehouse-unit-button,
 .map-unit-button.map-warehouse-unit-button:hover {
-  background-color: #f086334d;
+  background-color: var(--condo-global-color-orange-1);
+  border-color: var(--condo-global-color-orange-3);
 }
 
 .map-unit-button.map-commercial-unit-button,
 .map-unit-button.map-commercial-unit-button:hover {
-  background-color: #eb34684d;
+  background-color: var(--condo-global-color-pink-1);
+  border-color: var(--condo-global-color-pink-3);
 }
 
 .ant-comment > .ant-comment-inner {
